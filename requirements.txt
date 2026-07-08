@@ -1,0 +1,6 @@
+torch>=2.0
+geomloss>=0.3
+pykeops>=2.0
+numpy
+pillow
+matplotlib

@@ -1,0 +1,1877 @@
+===== PAGE 1 =====
+Neural Brushstroke Engine:
+Learning a Latent Style Space of Interactive Drawing Tools
+MARIA SHUGRINA, NVIDIA, Canada
+CHIN-YING LI∗, Asana, Canada
+SANJA FIDLER, NVIDIA, Canada, University of Toronto, Canada, and Vector Institute, Canada
+latent space
+of brushes
+natural language brush discovery
+1
+2
+3
+4
+5
+“blades of grass”
+interactive drawing
+in any style
+“lady bug”
+“sidewalk chalk”
+“cracked walnuts”
+“gothic lace”
+“candy cane”
+“Andy Warhol paint”
+GAN
+Fig. 1. Latent space of brushes learned by Neural Brushstroke Engine allows interactive drawing in a wide array of styles and exploration of the brush latent
+space, for example through natural language search (see bottom right). All drawings ©Maria Shugrina.
+We propose Neural Brushstroke Engine, the first method to apply deep
+generative models to learn a distribution of interactive drawing tools. Our
+conditional GAN model learns the latent space of drawing styles from a
+small set (about 200) of unlabeled images in different media. Once trained,
+a single model can texturize stroke patches drawn by the artist, emulating
+a diverse collection of brush styles in the latent space. In order to enable
+interactive painting on a canvas of arbitrary size, we design a painting engine
+able to support real-time seamless patch-based generation, while allowing
+artists direct control of stroke shape, color and thickness. We show that
+the latent space learned by our model generalizes to unseen drawing and
+more experimental styles (e.g. beads) by embedding real styles into the latent
+space. We explore other applications of the continuous latent space, such as
+optimizing brushes to enable painting in the style of an existing artwork,
+automatic line drawing stylization, brush interpolation, and even natural
+language search over a continuous space of drawing tools. Our prototype
+received positive feedback from a small group of digital artists.
+CCS Concepts: • Computing methodologies →Graphics systems and
+interfaces; Neural networks; Image manipulation.
+∗Work done during internship at NVIDIA.
+Authors’ addresses: Maria Shugrina, NVIDIA, Toronto, Canada, shumash@gmail.com;
+Chin-Ying Li, Asana, Vancouver, Canada, chinyingli.alice@gmail.com; Sanja Fidler,
+NVIDIA, Toronto, Canada , University of Toronto, Toronto, Canada , Vector Institute,
+Toronto, Canada, fidler@cs.toronto.edu.
+Permission to make digital or hard copies of all or part of this work for personal or
+classroom use is granted without fee provided that copies are not made or distributed
+for profit or commercial advantage and that copies bear this notice and the full citation
+on the first page. Copyrights for components of this work owned by others than the
+author(s) must be honored. Abstracting with credit is permitted. To copy otherwise, or
+republish, to post on servers or to redistribute to lists, requires prior specific permission
+and/or a fee. Request permissions from permissions@acm.org.
+© 2022 Copyright held by the owner/author(s). Publication rights licensed to ACM.
+0730-0301/2022/12-ART269 $15.00
+https://doi.org/10.1145/3550454.3555472
+Additional Key Words and Phrases: GANs, example-based media, digital
+brushes
+ACM Reference Format:
+Maria Shugrina, Chin-Ying Li, and Sanja Fidler. 2022. Neural Brushstroke
+Engine: Learning a Latent Style Space of Interactive Drawing Tools . ACM
+Trans. Graph. 41, 6, Article 269 (December 2022), 19 pages. https://doi.org/
+10.1145/3550454.3555472
+1
+INTRODUCTION
+Generative Adversarial Networks (GANs) [Goodfellow et al. 2014]
+have shown a remarkable range of applications by approximating a
+continuous distribution of natural images from unlabeled data. We
+follow the same methodology and instead apply deep convolutional
+GANs to model a distribution of interactive drawing tools, showing
+a range of novel and expressive applications in control and discovery
+of digital brushes. Where a latent code 𝑧sampled from a continuous
+distribution corresponds to a full image in a classic GAN, in our
+work 𝑧becomes the identity of the brush that can be used for free-
+form drawing, extending the benefits of continuous latent spaces to
+interactive drawing tools for the first time.
+As the first application of deep generative networks to approxi-
+mate a range of diverse digital brushes, our method does not aim
+to outperform time-honed techniques for emulating any specific
+medium. Modern methods for synthesis of interactive brush strokes
+achieve impressive quality and speed, and are widely available in
+applications such as Corel Painter, Procreate and Adobe Fresco.
+However, simulation of any one realistic medium (e.g. oil paint)
+requires a heavy engineering effort, making diverse high quality
+brushes unattainable in most drawing applications. The other brush
+types, typically based on cloning or stamping, have a flat appearance
+and struggle to support effects such as volumetric paint. Further,
+ACM Trans. Graph., Vol. 41, No. 6, Article 269. Publication date: December 2022.
+
+
+===== PAGE 2 =====
+269:2
+•
+Shugrina et al.
+it is not possible to optimize or interpolate within such discrete
+curated collection of brushes to achieve certain effects. By encod-
+ing many diverse media within a single trained model, our method
+shows a promising approach to deliver a wide range of realistic
+styles within a single algorithmically lightweight toolbox, while
+allowing additional applications.
+The two main contributions of Neural Brushstroke Engine are a
+controllable patch-based GAN generator 𝐺and a painting engine
+that allows this generator to be used for interactive drawing. In-
+spired by recent approaches, we train our convolutional model to
+stylize patches of user-drawn strokes to look like realistic brush-
+strokes by training from two unlabeled and unpaired image domains:
+synthetic plain strokes and a relatively small set of sample strokes
+in different media (our largest train set is 241 images). We modified
+existing design of StyleGAN2 [Karras et al. 2019] to control image
+output using an external plain user stroke. Once trained, 𝐺can
+stylize any plain stroke in a wide variety of styles that we show
+to generalize beyond the training set. Beyond multi-modal image-
+to-image translation, we parameterize the output of 𝐺following
+[Shugrina et al. 2020] to support compositing of clear brush strokes
+and user control of color. To allow interactive painting and seam-
+less patch-based generation on arbitrary canvas sizes, we design a
+painting engine with 𝐺as its backbone. To show practical viability,
+we implement a drawing interface powered by Neural Brushstroke
+Engine and test it with a small group of professional digital artists.
+Beyond interactive drawing in many styles, Neural Brushstroke
+Engine invites other applications. For example, our paint engine
+can also automatically stylize entire input line drawings and text.
+Continuous latent space supports brush interpolation, for example
+between such stylized line drawings. In addition, we show that
+despite being trained in a low-data regime, our model generalizes
+to out-of-distribution drawing styles. This enables exploration and
+discovery of brushes beyond the training set. For example, we show
+that it is possible to optimize brushes to allow interactively drawing
+in the textural style of a target artwork. We also demonstrate the first
+method to find unseen brushes based on a natural language query
+by leveraging CLIP [Radford et al. 2021]. Finally, Neural Brushstroke
+Engine is a differentiable style-based stroke renderer that can find
+many uses in deep learning for artistic applications.
+In summary, the contributions of our work are as follows:
+(1) the first method to approximate a continuous distribution of
+diverse drawing media by learning from unlabeled images
+(2) a novel parametrization of the GAN output in terms of colors
+and alpha maps, allowing recoloring and compositing
+(3) a patch-based painting engine that avoids stitching artifacts and
+supports interactive drawing and offline stylization
+(4) the first technique to support brush style interpolation
+(5) excellent results of embedding real styles into the latent space,
+allowing drawing with the optimized brushes
+(6) the first natural language search over a continuous space of
+interactive drawing tools
+Following related work (§2), we describe our generative model ar-
+chitecture and training (§3). We then design the painting engine
+powered by this patch-based generator to support interactive draw-
+ing (§4), and dive into applications of the latent brush space for brush
+discovery in §5. We conclude with qualitative results, applications
+and experiments (§6) and a user study (§7).
+2
+RELATED WORK
+Remarkable progress in interactive drawing tools has been made
+(§2.1). In contrast to prior work, our method is the first to approx-
+imate a distribution of interactive artistic tools by learning from
+data, borrowing from recent generative techniques (§2.2).
+2.1
+Digital Artistic Media
+Methods for simulating physical artistic tools have a long his-
+tory, including progressively more accurate simulation of physical
+paints and other media [Baxter and Govindaraju 2010; Baxter et al.
+2004b; Chen et al. 2015; Chu et al. 2010; Chu and Tai 2005; Curtis
+et al. 1997; Hertzmann 1998], as well as methods that improve the
+efficiency of such simulations [Baxter et al. 2004a; DiVerdi et al.
+2010; Hertzmann 2002; Stuyck et al. 2017; Wu et al. 2018]. Several
+methods model a whole class of simulated brushes for driving digital
+media [Baxter and Govindaraju 2010; Baxter and Lin 2004; DiVerdi
+2013; DiVerdi et al. 2010]. Rather than emulating a specific medium
+(e.g. watercolor) or instrument (e.g. bristle brush) as precisely and
+efficiently as possible, our method learns a whole style space of
+interactive digital tools. Production constraints can pose a barrier
+to implementing additional media within commercial applications
+[DiVerdi et al. 2010], and our approach enables an algorithmically
+lightweight toolbox for a wide range of tools. As a first method to
+take this direction, we focus on stroke appearance and ignore fine
+aspects of dynamic behavior, which many prior works consider.
+Example-based methods emulate interactive media using patch-
+based synthesis, i.e. by borrowing pixels from an exemplar using
+intelligent search and stitching. Some methods allow painting with
+a single texture image [Lukáč et al. 2015, 2013; Ritter et al. 2006]
+by relying on exemplar annotations such as edges. These methods
+can yield stunning results, but often require run-time input beyond
+the drawn stroke [Lukáč et al. 2015, 2013] and can introduce errors
+if annotations are incorrect. Other techniques focus on emulating
+drawing media [Ando and Tsuruno 2010; Kim and Shin 2010; Lu
+et al. 2013], and in all cases require detailed pre-processing of input
+exemplars into a lookup-ready stroke library. Unlike ours, none of
+the example-based approaches learn to extrapolate new styles or
+work with unlabeled images. Recently, deep learning has been used
+to synthesize strokes in a particular medium using labeled data, for
+example to speed up oil paint simulation [Wu et al. 2018], render
+3D models in a specific hand-drawn style [Liu et al. 2021a], or ap-
+proximate simple stroke rendering differentiably [Huang et al. 2019;
+Nakano 2019; Zheng et al. 2018]. In contrast, our model learns many
+different styles within the same model from unlabeled examples.
+By construction, methods tailored for interactive drawing typi-
+cally support basic requirements of a drawing tool, namely:
+R1 Local control over stroke geometry
+R2 Background separation and ability to composite strokes
+R3 Ability to change color
+R4 Generation on any canvas size
+R5 Interactive drawing
+ACM Trans. Graph., Vol. 41, No. 6, Article 269. Publication date: December 2022.
+
+
+===== PAGE 3 =====
+Neural Brushstroke Engine:
+Learning a Latent Style Space of Interactive Drawing Tools
+•
+269:3
+Table 1. State-of-the art in digital media and most relevant conditional generative models or image-to-image translation models that could be employed for
+brushstroke stylization.
+Properties
+Basic Drawing Support
+Styles
+No
+labels
+Local
+control
+Backgr.
+separation
+Color
+control
+Arbitrary
+canvas
+Interactive
+drawing
+Multiple
+styles/model
+Style
+interpolation
+Style
+retrieval
+Novel
+styles
+Example-based Digital Media
+[Ritter et al. 2006]
+×
+×
+×
+×
+×
+×
+[Lukáč et al. 2015]
+×
+×
+×
+×
+×
+×
+[Lukáč et al. 2013]
+×
+×
+×
+×
+×
+×
+×
+[Kim and Shin 2010]
+×
+×
+×
+×
+×
+[Ando and Tsuruno 2010]
+×
+×
+×
+×
+×
+[Lu et al. 2013]
+×
+×
+×
+×
+×
+×
+[Wu et al. 2018]
+×
+×
+×
+×
+×
+×
+[Liu et al. 2021a]
+×
+×
+×
+×
+×
+×
+×
+×
+[Zheng et al. 2018]
+×
+×
+×
+×
+×
+[Huang et al. 2019]
+×
+×
+×
+×
+×
+Generative Models & Style Transfer
+[Park et al. 2019]
+×
+×
+×
+×
+×
+[Park et al. 2020]
+×
+×
+×
+×
+×
+×
+×
+×
+[Fish et al. 2020]
+×
+×
+×
+×
+×
+×
+×
+×
+[Li et al. 2019]
+×
+×
+×
+×
+×
+[Almahairi et al. 2018]
+×
+×
+×
+×
+[Ma et al. 2018]
+×
+×
+×
+×
+×
+[Huang et al. 2018]
+×
+×
+×
+×
+[Lee et al. 2020]
+×
+×
+×
+×
+Neural Brushstroke Engine (Ours)
+In the case of other image generation methods, described next,
+many of these requirements are difficult to meet. We, therefore,
+break down most relevant methods by their support of R1-R5 and
+also by their handling of style in Tb.1.
+2.2
+Image Generation Techniques
+Our approach is related to neural texture synthesis [Alanov et al.
+2019; Bergmann et al. 2017; Gatys et al. 2015; Liu et al. 2020; Mardani
+et al. 2020], but these methods do not support interactive generation
+or stroke-based texturing. Similarly to our approach, Henzler et al.
+[2020] learn a latent space of textures, but their method is geared
+toward 3D objects and cannot render interactive strokes. While
+some approaches can blend between user-specified texture regions
+[Li et al. 2017; Yu et al. 2019a], these methods cannot be trained on
+heterogeneous texture samples (i.e. containing "stroke" and "paper")
+like ours, and do not consider a critical aspect of stroke style – its
+edge [Ritter et al. 2006]. Therefore, it would be difficult to directly
+apply texture synthesis methods to interactive drawing.
+Broadly, our method can be classified as image-to-image transla-
+tion, where image in the domain A is the plain interactive stroke
+that has to be translated to domain B, which contains diverse draw-
+ing media. Style transfer is a special case of this problem that aims
+to regenerate input image in the textural style of the target example
+[Gatys et al. 2016; Hertzmann et al. 2001; Huang and Belongie 2017;
+Li et al. 2019], but approaches of this class are not designed to work
+interactively or to simulate individual brush strokes. To test this
+limitation, we compare our generator to the model of [Li et al. 2019],
+when trained to stylize the appearance of individual brushstrokes.
+On the other hand, recent stroke-based stylization methods [Huang
+et al. 2019; Liu et al. 2021b; Singh and Zheng 2021; Zou et al. 2021]
+rely on simple brush models of a fixed style and could integrate our
+differentiable Neural Brushstroke Engine instead.
+Other modern approaches to general image-to-image transla-
+tion include methods relying on paired training data (e.g. sketch
+and photo) [Isola et al. 2017; Sangkloy et al. 2017; Wang et al. 2018].
+While some of these allow expressive user input and diverse re-
+sults [Ghosh et al. 2019; Park et al. 2019; Xian et al. 2018; Xiao et al.
+2021], none support generating individual brushstrokes and most
+rely on paired training data. Because paired data for our task is not
+readily available, we formulate our training in an unpaired setting.
+First unpaired methods used cycle consistency [Zhu et al. 2017],
+and more recently improved techniques have been proposed for
+unpaired training [Park et al. 2020]. Relevant to this line of research
+and patch-based generation, [Fish et al. 2020] use paired image-to-
+image translation methods and ideas from [Zhu et al. 2017] to train
+single-style translation models for seamless sketch stylization. How-
+ever, most unpaired methods, such as those above, only generate
+one output for a given input and cannot simulate multiple styles, our
+goal. Multi-modal unpaired image-to-image translation techniques
+are most relevant to our method and typically rely on learning a
+disentangled representation of content and style [Almahairi et al.
+2018; Huang et al. 2018; Lee et al. 2018, 2020; Ma et al. 2018; Yu et al.
+2019b]. These and other image-to-image translation methods are
+not designed for interactive generation and fulfill only requirement
+R1 (above). We test the generators of [Huang et al. 2018] and [Lee
+et al. 2020] on our problem domain. Refer to Tb.1 for summary.
+Generative Adversarial Networks (GANs) [Goodfellow et al.
+2014] continue to show impressive results in image generation
+[Brock et al. 2018; Karras et al. 2021, 2019, 2020b], including sce-
+narios with limited data [Karras et al. 2020a]. These techniques
+ACM Trans. Graph., Vol. 41, No. 6, Article 269. Publication date: December 2022.
+
+
+===== PAGE 4 =====
+269:4
+•
+Shugrina et al.
+are closely tied to many image-to-image translation methods, and
+have also inspired hundreds of publications on semantic control,
+disentanglement and manipulation of the GAN latent space. To our
+knowledge none of the prior works leverage generative image tech-
+niques for interactive painting supporting requirements R1-R5 and
+a continuous space of brushes. We briefly survey methods relevant
+to some of the above requirements, but a comprehensive survey is
+beyond the scope of this paper. A wide range of approaches for ma-
+nipulating images using GANs have been developed. For example,
+many methods allow control and exploration of high-level attributes
+by leveraging the latent space [Abdal et al. 2020, 2021a,c; Alaluf et al.
+2021; Härkönen et al. 2020; Kim et al. 2021; Richardson et al. 2021;
+Tov et al. 2021], or by modifying GAN architectures with built-in
+control using available labels [Choi et al. 2018; Shoshan et al. 2021]
+or in an unsupervised way [Afifi et al. 2021]. Other methods develop
+more fine-grained control [Bau et al. 2019; Ling et al. 2021; Zhu et al.
+2021], but are not well-suited for interactive patch-based generation,
+as they rely on high-level semantic understanding of the image or
+follow domain-specific pipelines. For example, [Jang et al. 2021]
+adjust coarse and fine layers of StyleGAN for caricature genera-
+tion from photo and [Zhu et al. 2021] allow editing of hairstyles
+using target images by developing a novel embedding space and
+designing a complex pipeline of segmentation mask alignment to
+support training. Many other techniques are developed for face and
+body generation and manipulation [Chen et al. 2021; Liu et al. 2022;
+Wu et al. 2022], including using sketches. We build on StyleGAN2
+generator [Karras et al. 2020a, 2019, 2020b], and take inspiration
+from these techniques to modify its architecture for direct control
+of stroke geometry and color. Like many before us, we leverage
+the power of StyleGAN embedding space, including the W+ space
+[Abdal et al. 2019] and noise inputs [Karras et al. 2020b], but in our
+case the latent code corresponds to the interactive tool, not the final
+image, calling for a different set of considerations.
+Relevant to R2, some methods leverage GAN features for segmen-
+tation and other labeling [Zhang et al. 2021]. We choose not to rely
+on such downstream segmentation to enable compositing (R2), but
+instead design a generator that natively outputs soft alpha maps.
+Several related methods use alpha compositing, like our technique,
+to generate final results [Abdal et al. 2021b; Kwak and Zhang 2016;
+Yang et al. 2017], but do not leverage this for interactive control.
+Further, while many methods have been developed for interactive
+recoloring (R3) [Du et al. 2021; Shugrina et al. 2020; Zhao et al. 2021],
+adding recoloring during post-processing would not allow setting
+the color of the brush during drawing, which is a basic requirement.
+We parameterize our generator to allow direct control of color.
+Also relevant to our work is text-driven manipulation of images,
+including using CLIP [Radford et al. 2021]. In contrast to [Abdal et al.
+2021a], who use CLIP to find edit directions for StyleGAN, and [Gal
+et al. 2021b] who finetune a trained GAN to achieve one text-guided
+style, we use CLIP embeddings to discover new interactive tools
+within our model’s latent space. We also recognize that future work
+can leverage new generators, such as diffusion models [Saharia et al.
+2021] and frequency-based image representations [Gal et al. 2021a].
+3
+PATCH-BASED GENERATOR
+As any GAN, the generator 𝐺of Neural Brushstroke Engine learns
+to generate diverse "fake" image patches when trained on unlabeled
+"real" patches by relying on a concurrently trained discriminator.
+Unlike a traditional GAN, our model must also follow user guidance
+for stroke geometry and color. During training we rely on two
+unpaired and unlabeled datasets of patches: dataset X of strokes in
+various media, and dataset G of plain black-on-white strokes.
+3.1
+Formulation and Background
+Given user stroke (or "geometry") g, colors c, and medium 𝑚(e.g.
+impasto oil paint), the painted stroke x is drawn from the probability
+distribution 𝑝(x|𝑚, c, g). Here we make a simplifying assumption
+that color variations due to lighting and camera can be encoded in
+c or 𝑚, and that g is relative to the image plane. Our training data
+is a collection of image patches X = {x𝑖} in various media, drawn
+from the joint distribution 𝑝(x,𝑚, c, g), where each patch contains
+a stroke in only one medium and color (Fig.9a). If we assume that
+medium 𝑚, color c and stroke geometry g are independent, as any
+set of colors and user strokes can be expected for any input medium,
+then our sampled distribution factorizes to be:
+𝑝(x,𝑚, c, g) = 𝑝(x|𝑚, c, g)𝑝(𝑚)𝑝(c)𝑝(g).
+(1)
+Using this data, we aim to model both the marginal distribution
+over different media 𝑝(𝑚), and the conditional distribution over
+strokes drawn in that medium 𝑝(x|𝑚, c, g). Specifically, we want to
+sample unlimited media ˆ𝑚∼ˆ𝑝(𝑚), and images drawn in each of
+these media ˆx ∼ˆ𝑝(x| ˆ𝑚,𝑐,𝑢) given any user stroke g and color c,
+where ˆ𝑝denotes the approximated distribution.
+In a traditional GAN formulation, a model trained on images X
+approximates the true image distribution 𝑝(x) with 𝑝𝐺(x). Typically,
+the generator 𝐺produces a random image deterministically, given
+a random vector z drawn from a simple distribution. StyleGAN
+[Karras et al. 2019] proposed first mapping this random z to another
+space of "style" latent vectors using a learned Mapping Network.
+This allows learning to reshape the simple distribution over z into
+a distribution 𝑝𝐺(𝑤) that is more meaningful for conditioning a
+convolutional neural network with adaptive layers.
+We adapt StyleGAN training for our problem. In our formulation,
+𝑝𝐺(𝑤) approximates the joint distribution over media and colors
+𝑝(𝑚, c), which, given the independence assumption, is the same
+as 𝑝(𝑚)𝑝(c) in Eq.1. Thus the style vector w represents both color
+and medium, where the color output by the generator is modeled
+explicitly and can be directly swapped by a user-provided value
+(See §3.2). The convolutional generator itself directly models our
+distribution of interest 𝑝(x|𝑚, c, g), i.e. how to render strokes in a
+given medium, color and following user stroke g. Our generator
+does not model 𝑝(g), and g is injected into the network externally
+from an unpaired, synthetic dataset of untextured strokes G. We,
+therefore, implicitly assume that the geometry distribution 𝑝(g)
+imposed by G is similar to the unknown geometry distribution in
+the style dataset X.
+ACM Trans. Graph., Vol. 41, No. 6, Article 269. Publication date: December 2022.
+
+
+===== PAGE 5 =====
+Neural Brushstroke Engine:
+Learning a Latent Style Space of Interactive Drawing Tools
+•
+269:5
+Fig. 2. Architecture and Training: Neural Brushstroke Engine extends StyleGAN2 architecture (striped yellow blocks) to condition image generation on
+stroke geometry g. Represented as a binary image, g is passed through a pre-trained Geometry Encoder to produce spatial features that are concatenated with
+the StyleGAN features . Instead of outputting RGB, the final ToTriad layer (§3.2) of our generator produces a decomposed image representation that allows
+recoloring, compositing and formulating a geometric loss L𝑔𝑒𝑜(§3.4). See §3.3 for architecture details and §3.5 for training.
+3.2
+Modeling Color and Background
+Ability to control stroke color is essential for any digital brush. On
+the other hand, typical GAN architectures output RGB values di-
+rectly. Rather than devising control mechanisms to steer the learned
+generative process toward desired color choices, we re-formulate
+𝐺to output a parametrization of the image where color is directly
+controllable. Conveniently, this intermediate output also allows
+formulating a loss for respecting stroke guidance g.
+Our formulation is based on color triads [Shugrina et al. 2020] and
+the observation that many images are well-modeled by a mix of only
+3 colors. This is especially true of simple brushstrokes in a single
+medium, and we thus forgo the non-linearity in color triads and
+simply model each output patch as a linear mix of 3 colors (see SM,
+C2). We will refer to this as the Alpha-color (AC) parametrization.
+Formally, the final layer of the generator𝐺outputs a 3-channel alpha
+image 𝐴= (𝛼0, 𝛼1, 𝛼2) at the target resolution 𝐻x𝐻, as well as 3
+RGB colors c = (𝑐0,𝑐1,𝑐2) (Fig.3a). The final "fake" output image is
+obtained through simple alpha compositing:
+x = Σ𝑖𝛼𝑖· 𝑐𝑖.
+(2)
+Note that the three alphas are guaranteed to sum up to 1 for ev-
+ery pixel due to a channel-wise softmax operator. We leverage AC
+parametrization to define 𝛼2 as the background and 𝛼0 + 𝛼1 as the
+foreground, and use these conventions to formulate a training loss
+(§3.4) encouraging the generator to respect the input stroke (Fig.3a).
+Once the generator is trained, treating (1 −𝛼2) as transparency
+allows compositing strokes over a clear background (Fig.3a, bottom).
+Replacing default 𝑐0 and 𝑐1 with custom colors enables versatile two-
+color control of the output stroke (Fig.3b), inspired by multi-color
+recoloring of [Shugrina et al. 2020; Tan et al. 2018]. No additional
+post-processing or segmentation networks are needed, and the re-
+coloring result is consistent across all generated patches for a given
+brush style. We next explain how to make this work in practice.
+3.3
+Network Architecture
+We choose to explore StyleGAN2 [Karras et al. 2019] architecture due
+to the powerful properties of its latent space and its demonstrated
+ability to learn in low-data regime [Karras et al. 2020a]. We modify
+(a) Geometric Control: generator output for varying inputs g
+(b) Color Control: effect of setting custom colors for a fixed z
+Fig. 3. Alpha-color (AC) parametrization: our generator outputs colors
+and alpha maps (§3.2), allowing color(b) and geometric control and com-
+positing(a).
+StyleGAN2 to allow conditioning on plain input patch g and add AC
+parametrization. See Fig.2, with novel components shown in green.
+To condition the generator on stroke geometry g, we forego
+analytic definitions such as splines, which impose unnecessary con-
+straints on the input format and make thickness difficult to model.
+Instead, we leverage the powerful image processing properties of
+neural networks and process raw 𝐻×𝐻binary input image g of the
+ACM Trans. Graph., Vol. 41, No. 6, Article 269. Publication date: December 2022.
+
+
+===== PAGE 6 =====
+269:6
+•
+Shugrina et al.
+user stroke with a simple pre-trained autoencoder 𝐸𝑔𝑒𝑜. This net-
+work is composed of an 𝑛-layer convolutional encoder, outputting
+a 𝑘0-channel feature map 𝑓0 of size 𝐻/2𝑛× 𝐻/2𝑛at the bottleneck
+layer. The following upsampling layers of the decoder output pro-
+gressively larger feature maps 𝑓1, 𝑓2, ... of dimensions 𝐻/2𝑛−1, ....
+These feature maps are guaranteed to contain a summary of g, suffi-
+cient to reconstruct it. In order to inject this geometric information
+into StyleGAN, we concatenate one or more 𝑓𝑖with the StyleGAN
+features at the appropriate resolution. We use resolution 𝐻= 128
+for both g and generator output, which we deem appropriate for
+modeling brushes on a patch level.
+Second, we replace the last layer of StyleGAN which produces
+RGB color values with a ToTriad layer followed by deterministic
+alpha compositing (Eq.2). ToTriad implements the AC parametriza-
+tion (§3.2) through an affine transformation that maps w not only to
+the layer-specific style (as in [Karras et al. 2019], where it is referred
+to as "𝐴", not to be confused with alpha layers 𝐴), but also to 9
+additional values per each generated image in the batch. These 9
+values are combined with an additional learned bias and a tanh acti-
+vation to produce colors c. The other channels of the layer-specific
+style are used as usual in the final synthesis layer, resulting in a
+3-channel image, which is passed through a softmax operation for
+each pixel to produce 3 alpha masks 𝐴with values at every pixel
+summing to 1. Note that we do not use the residual version of Style-
+GAN, where RGB values summed across resolutions. Early trials of
+training vanilla StyleGAN on our unstructured scribbles revealed
+that the residual layers contribute little to the final result, which is
+not surprising, given lack of any global composition that could be
+affected by 𝑤. See Suppl. Material (SM) for other network details.
+3.4
+Additional Losses
+We use the alpha output 𝐴= (𝛼0, 𝛼1, 𝛼2) to define a loss quantifying
+how well the generator respects input guidance image g. We define
+𝛼2 to be the background, and use g as the ground truth target during
+training. Any segmentation loss could be used, but we found the
+continuous version of intersection-over-union (IoU) [Rahman and
+Wang 2016] to perform most consistently. It is defined as:
+𝐼𝑜𝑈(𝐼0, 𝐼1) =
+|𝐼0 · 𝐼1|𝑠
+(|𝐼0 + 𝐼1|𝑠−|𝐼0 · 𝐼1|𝑠)
+(3)
+for grayscale images 𝐼0, 𝐼1 ranging from 0 to 1, where · and + are
+pixel-wise multiplication and addition, and |.|𝑠is the sum across all
+spatial dimensions. Thus, we define our geometric loss to be:
+L𝑃
+𝑔𝑒𝑜(g,𝐴) = 𝐼𝑜𝑈(𝑃(g), 𝛼2),
+(4)
+where 𝑃is an optional pre-processing operator. Note that we apply
+the loss only to the last alpha map 𝛼2 of 𝐴. The standard losses
+L𝐺for training the generator and L𝐷for discriminator remain
+unchanged from standard GAN training.
+3.5
+Training
+We first pre-train the geometry encoder 𝐸𝑔𝑒𝑜on plain strokes G, and
+fix its weights to ensure that stroke information is always correct
+and to prevent the generator from "cheating". See SM for details
+on network structure and training of this standard building block.
+Following this, our generator 𝐺is trained similarly to a traditional
+StyleGAN, with modifications summarized in Alg.1. For each itera-
+tion we sample both the input geometry g (L7) and the target images
+x and obtain feature maps from 𝐸𝑔𝑒𝑜. The augmented generator 𝐺
+then produces alphas 𝐴used to compute the geometric loss (Eq.4).
+We additionally found it helpful to warmstart training by first up-
+dating only some geo_layers of 𝐺based on geometric loss (L13-14)
+to pre-condition the generator to use 𝛼2 for the background.
+Algorithm 1 Training Neural Brushstroke Engine generator 𝐺
+1: G ←stroke geometry dataset
+2: X ←style dataset
+3: 𝐸𝑔𝑒𝑜←pre-trained encoder
+4: 𝐺, 𝐷←initialize generator, discriminator
+5: 𝐾, 𝐵←0, 0 (total images, total batches)
+6: while 𝐾< 𝑘𝑖𝑚𝑔+ 𝑘𝑓𝑖𝑛𝑒do
+7:
+g ←sample batch_size from G
+8:
+x ←sample batch_size from X
+9:
+z ←random vector
+10:
+{𝑓𝑖} ←𝐸𝑔𝑒𝑜(g;𝑖=feature maps)
+11:
+𝐴, c ←𝐺({𝑓𝑖}, z)
+12:
+x′ ←composite(𝐴, c)
+13:
+if 𝐾< 𝑘𝑤𝑎𝑟𝑚then
+⊲geo warmstart
+14:
+geo_layers(𝐺) ←backprop L𝑤𝑎𝑟𝑚(g,𝐴)
+15:
+else if 𝐾> 𝑘𝑖𝑚𝑔then
+⊲geo finetune
+16:
+x′∗←composite(𝐺∗({𝑓𝑖}, z))
+17:
+geo_layers(𝐺) ←backprop L𝑓𝑖𝑛𝑒(g,𝐴, x′, x′∗)
+18:
+else
+⊲standard GAN update
+19:
+𝐺←backprop L𝐺+ 𝛾L𝑔𝑒𝑜(g,𝐴)
+20:
+𝐷←backprop L𝐷
+21:
+if 𝐵mod 𝑇𝑔𝑒𝑜≡0 then
+⊲geo phase (optional)
+22:
+geo_layers(𝐺) ←backprop L𝑔𝑒𝑜(g,𝐴)
+23:
+𝐺∗←𝐺
+24:
+𝐵, 𝐾←𝐵+ 1, 𝐾+ batch_size
+Balancing geometric loss with standard GAN loss is important,
+because weighing L𝑔𝑒𝑜too highly can cause 𝐺to output strokes
+that are too easily distinguishable from real by the discriminator.
+This is partially due to the assumption that the geometric distri-
+bution 𝑝(g) imposed by the geometry dataset G is similar to the
+(unknown) geometric distribution of real stylized data X, as detailed
+in §3.1. In addition, our goal is not to force the generator to adhere
+to the input g too precisely. The edge properties of natural media,
+such as rough edges of a painted stroke and fibers of a fuzzy string
+are important elements of the medium that the generator should
+synthesize despite the input stroke, thus violating precise guidance
+boundaries. We, therefore, experiment with several modes of apply-
+ing L𝑔𝑒𝑜. In the first mode, we simply add L𝑔𝑒𝑜weighed by 𝛾to
+the standard adversarial loss L𝐺(L19) in the main training phase.
+In the second mode, we only apply L𝑔𝑒𝑜every 𝑇𝑔𝑒𝑜iterations in a
+separate geometry phase, modifying only some geo_layers of 𝐺. In
+addition, we experiment with different preprocessors in Eq.4. We
+ablate all of these choices in our experiments (§6.3).
+3.6
+Finetuning for Control
+Because L𝑔𝑒𝑜is only used to gently steer 𝐺toward controllable
+output, as discussed above, generator is free to evolve many styles
+ACM Trans. Graph., Vol. 41, No. 6, Article 269. Publication date: December 2022.
+
+
+===== PAGE 7 =====
+Neural Brushstroke Engine:
+Learning a Latent Style Space of Interactive Drawing Tools
+•
+269:7
+that have non-clear background alpha, which is obvious when
+strokes are composited (Fig.4, left image). After training, we ad-
+ditionally finetune some layers of 𝐺(Alg.1, L15-17) to improve the
+clarity of background and use the following loss to ensure that the
+final appearance of output patches remains the same:
+L𝑓𝑖𝑛𝑒(g,𝐴, x′, x′
+∗) = 𝑎L𝑔𝑒𝑜(g,𝐴)+𝑏LPIPS(x′, x′
+∗)+𝑐𝐿1(x′, x′
+∗) (5)
+where x′∗is the output of the generator before finetuning, and 𝐿1
+and perceptual LPIPS [Zhang et al. 2018] constrain the network to
+maintain its final high-quality result and only change alpha map
+𝐴and color c outputs for better control, and 𝑎, 𝑏, 𝑐are constants.
+Without affecting the appearance of final styles or training stability,
+the fine-tuning stage has a strong effect on background clarity of
+styles in the latent space (See Fig.4 before and after finetuning).
+Because we stop finetuning before any degradation to final style
+appearance (measured as FID) and because IoU loss (§3.4) does not
+necessarily encourage confident output of𝛼2, some light background
+can still remain for some styles (See Fig.4, 3rd image from the left),
+causing artifacts during compositing. In most cases 𝛼2 is mostly
+clear and only a small adjustment is needed. We found that for any
+brush style 𝑧, the 𝛼2 in the background region is universally stable
+across patches generated for any input stroke g (e.g. as in Fig.3). We
+attribute this to the strong influence of the style w at every layer of
+StyleGAN. Because of this property of 𝐴, we can compute a constant
+adjustment function for alphas𝐴of any style to improve background
+clarity. This simple constant alpha reweighing is computed in real-
+time for any new 𝑧and is detailed in Supplementary Material (SM).
+Typical effect of alpha reweighing is demonstrated in Fig.4, and
+most results throughout the paper use this setting.
+4
+PAINTING ENGINE DESIGN
+A patch-based generator 𝐺that can stylize strokes in many media
+has limited applications, unless it can be used for interactive drawing
+on a larger canvas. In this section we complete the design of Neural
+Brushstroke Engine and present the painting engine that utilizes 𝐺
+to allow interactive (or automatic) painting on a canvas of any size.
+4.1
+Painting Engine
+We design the painting engine by considering two components: the
+client receiving interactive user strokes and displaying rendered
+canvas, and the server able to stylize stroke patches using 𝐺(refer
+to Fig.5 throughout this section). This abstraction applies both when
+the client and the server are collocated within the same application
+Fig. 4. Finetuning: effect of finetuning the generator 𝐺and applying style-
+specific alpha reweighing to improve background clarity (§3.5).
+on the same machine, and when the server is remote and communi-
+cation happens over the network. The client maintains two canvases
+of any user-selected size 𝑊𝐶× 𝐻𝐶. The hidden stroke canvas cap-
+tures brush interactions and allows rendering plain strokes using
+any naive method, such as sphere splatting. The foreground render
+canvas shows strokes rendered in the chosen style using 𝐺.
+The client maintains a brush state, such as the id of the latent
+code 𝑧and currently selected colors 𝑐0,𝑐1, and communicates these
+values to the server to maintain consistent state. The server main-
+tains the value of the active brush style. We omit communication
+of brush state from Fig.5, because the exact API depends on the
+application. For example, a different protocol will be needed when
+the client allows searching for styles using a natural language query
+(§5.3). The rest of the communication is demonstrated in Fig.5. The
+client tracks location of drawing cursor and renders plain lines on
+the stroke canvas. Whenever the size of the dirty window that has
+been modified exceeds certain size (we use 𝐻/2, where 𝐻is the
+output resolution of 𝐺), the client crops a stroke patch of size 𝐻×𝐻
+centered at the dirty window and sends it to the server, requesting
+a new image. Every image request includes patch location 𝑥𝑖,𝑦𝑖
+within the canvas. The server asynchronously sends back a (po-
+tentially cropped) patch and its location, and the client replaces
+the corresponding patch of the render canvas with the new value.
+We next describe techniques for avoiding stitching artifacts in this
+patch-based generation.
+4.2
+Seamless Stitching
+Patch-based generation can introduce stitching artifacts (Fig.6, top),
+as noted in [Fish et al. 2020]. Their work remedies this by teaching
+a network trained for a specific style to complete input patches, en-
+suring that partially generated pattern is continued smoothly. This
+technique imposes constraints on the order of generated patches,
+which cannot be met during interactive drawing.
+To achieve nearly seamless stitching, we combine two solutions.
+First, we observe that the strongest artifacts occur due to boundary
+effects and simply crop a margin 𝑚from all generated patches, no-
+ticeably improving quality (Fig.6, middle row). The second part of
+the solution is inspired by [Yu et al. 2019a], who learn to blend tex-
+tures in feature space. Rather than learning to blend, complicating
+our training and inference set up, we show that simply blending
+patches in feature space achieves nearly seamless generation for
+most styles (See our video and all result figures). In order to imple-
+ment this solution, we first select a feature blending level 𝛽, which
+corresponds to feature maps at the resolution 𝐻/𝛽. The server main-
+tains a feature canvas of size 𝑊𝐶/𝛽× 𝐻𝐶/𝛽and a corresponding
+feature mask, indicating which parts of the feature canvas have
+been set (Fig.5). For a new image request at 𝑥𝑖,𝑦𝑖, the server crops
+the corresponding 𝐻/𝛽× 𝐻/𝛽feature patch ¯𝑓𝑖and computes a soft
+blending alpha map 𝑀. Given input stroke g and style, we first com-
+pute the feature map 𝑓𝑖at the corresponding layer of StyleGAN, and
+then blend it as follows before passing it to the next layer:
+𝑓′
+𝑖= ¯𝑓𝑖· 𝑀+ 𝑓𝑖· (1 −𝑀).
+(6)
+The alpha map 𝑀is set to 0 where feature canvas has no features,
+and to 1 minus fixed soft fall off (Fig.5, bottom right) everywhere
+else. The fall off is zero beyond the crop margin 𝑚, and is a soft
+ACM Trans. Graph., Vol. 41, No. 6, Article 269. Publication date: December 2022.
+
+
+===== PAGE 8 =====
+269:8
+•
+Shugrina et al.
+Fig. 5. Interactive System Design: we design a painting engine for interactive (or automatic) painting on a canvas of arbitrary size (See §4).
+Fig. 6. Seamless Stitching: see §4.2 for techniques shown.
+linear blend within an additional blending margin 𝑚2. We typically
+set 𝑚= 8 and 𝑚2 = 16/𝛽for 𝐻= 128. The final generator output
+is cropped by 𝑚and sent back to the client. Bottom of Fig.6 shows
+final strokes; note that 𝛼2 transparency is not applied here.
+Discussion: We have experimented with several ways of using
+the feature canvas interactively. Replacing rather than compositing
+render canvas patches on the client side results in a "live" feeling
+of the canvas, where new strokes interact with existing strokes.
+Clearing feature canvas between every continuous stroke ensures
+that strokes of different colors can be composited and that eraser can
+be applied as usual. However, this technique also requires baking
+the render canvas and clearing the stroke canvas, thus reducing this
+"live" feeling because new strokes no longer interact with the canvas.
+We believe the feature canvas can provide additional creative control
+and have allowed our user study participants to manually create a
+new "live layer", thus controlling stroke interaction.
+4.3
+Prototype User Interface
+To validate the claim that Neural Brushstroke Engine can power a
+digital painting program, we implement an interactive user interface
+as a web application that efficiently communicates with 𝐺on the
+remote GPU server. This design allows the widest distribution by
+offloading resource-intensive StyleGAN to the cloud. To balance
+network throughput with interactive response, we set a rather con-
+servative window on the dirty window size (§4.1). Our client works
+on desktop or mobile browsers, supporting stylus input (see Video).
+While we provide a UI for color selection, stroke thickness and
+a menu of random, curated, and text-driven brushes, the design
+of the right interface solutions for creative tools built over Neural
+Brushstroke Engine is not a contribution of our work.
+4.4
+Automatic Generation
+Our painting engine also trivially applies to automatic stylization
+of larger line drawings. We simply break down the input into a
+set of overlapping geometric patches (Fig.6 top; Fig.8c, 1), with the
+overlap set according to the stitching parameters 𝑚and 𝑚2 (§4.2).
+Then, the stitching technique §4.2 is applied to render these patches
+sequentially, which is fast unless the artwork is exceedingly large.
+Automatic generation allows Neural Brushstroke Engine to stylize
+line drawing in many styles (Fig.8c, Fig. 5 in SM).
+5
+EXPLORING BRUSH STYLES
+In this section, we describe ways to explore the latent space of
+brushes supported by Neural Brushstroke Engine. Because this space
+is continuous by constructions (latent z is sampled from a Gaussian),
+it enables gradient-based optimization and search of brushes, e.g.
+to match an example (§5.2) or a text query (§5.3). Styles can also be
+smoothly interpolated (§5.4). These applications are not exhaustive,
+and merely show the range of possibilities enabled by a shared
+continuous latent space of interactive drawing tools.
+5.1
+Evaluating Control
+All styles are not created equal. Geometric control and clarity of
+background defined by the predicted 𝛼2 vary greatly among ran-
+domly sampled styles. We note that the quality of control varies for
+physical media as well. For example, "painting" with non-traditional
+media like a string of beads lacks conventional control of the paint
+brush. In §3.5, we improve the overall control and quality of the
+styles, but this does not eliminate all difficult-to-control styles from
+ACM Trans. Graph., Vol. 41, No. 6, Article 269. Publication date: December 2022.
+
+
+===== PAGE 9 =====
+Neural Brushstroke Engine:
+Learning a Latent Style Space of Interactive Drawing Tools
+•
+269:9
+the latent space. However, this does not preclude its practical appli-
+cation, as we can simply filter and search styles while considering
+their controllability, quantified below.
+There is no perfect metric to measure how well the input stroke
+g is respected in the final output. For some styles it may be desir-
+able to hallucinate rough edges deviating from the input (imagine
+watercolor bleeding into the paper). In other cases, thinner lines
+may be appropriate (e.g. pencils only come in a small diameter). We
+explored a number of metrics for geometric control, but settled on a
+easy to understand measure of background clarity (BGC) to gauge
+control and compositing quality for a given style z:
+BGC𝑃(z, {g𝑖}) =
+Í
+𝑖|𝛼2(g𝑖, z) · 𝑃(g𝑖)|𝑠
+Í
+𝑖|𝑃(g𝑖)|𝑠
+,
+(7)
+where 𝛼2(g𝑖, z) is the 𝛼2 output of the generator, given style z and
+input g, and operations are defined as in Eq.3. 𝑃is a preprocessor
+that sets background pixels to 1 and others to 0. We will use 𝑃later
+to allow treating the edge of the stroke with more flexibility. This
+metric is not vulnerable to unintuitive effects of averaging, because
+of 𝛼2 stability in the background of any style (see §3.5).
+5.2
+Style Embedding
+Mapping, or embedding, a real image into the GAN latent space has
+been widely used for editing of real photographs, e.g. [Abdal et al.
+2020]. In the case of Neural Brushstroke Engine, encoding an image
+of a real medium into the latent style space of 𝐺allows painting
+with the encoded tool. This means that embedded styles must work
+robustly for novel input strokes.
+To drive latent code optimization, we require an image in the
+target style and the corresponding stroke geometry, from which
+we sample paired patches {g𝑖, ¯x𝑖} = 𝑇. Given stroke inputs g𝑖, the
+goal is to optimize latent code w (See background in §3.1) such that
+the generated images x𝑖look like the targets ¯x𝑖. Following [Abdal
+et al. 2019], we optimize into the extended W+ space, which means
+optimizing for a separate w code for every layer of StyleGAN. Our
+optimization is based on [Karras et al. 2020b], who also optimize
+for and regularize StyleGAN noise inputs, which are 1-channel
+images of the same resolution as the corresponding StyleGAN layers
+and are typically fixed or set to random values. We found that
+both optimizing into W+ and optimizing for (and relying on) noise
+improve quality of the output style both when overfitting to a single
+target patch and when optimizing across patches (Fig. 7a). In contrast
+to other GAN embedding methods, where the optimized latent is the
+means for downstream editing, our embedded style is the interactive
+tool itself. It is therefore not necessary to minimize reliance on noise,
+and we use both w+ and optimized 𝜂in the obtained style.
+Beyond embedding quality, the optimized styles must work well
+interactively. First, we found that including more patches in 𝑇
+greatly improves robustness to novel stroke inputs (Fig.7b). Note
+that we filter patches to not be blank, and randomize scale to ensure
+robustness to different thicknesses. We use 60 target patches for all
+of our results. Second, because styles vary in their controllability
+(§5.1), we steer optimization toward styles with good compositing
+by adding BGC metric to the overall optimization objective:
+Lemb = 𝛾BGC𝑃(w+,𝜂, {g𝑖}) +
+∑︁
+g𝑖,¯x𝑖∈𝑇
+LPIPS(x𝑖, ¯x𝑖),
+(8)
+(a) Optimizing noise and using W+ improve quality
+(b) Optimizing with more patches generalizes better to new strokes
+(c) Geometry input affects resulting control
+Fig. 7. Real Style Embedding: effect of various factors on latent code
+optimization (§5.2). All drawings ©Maria Shugrina.
+where LPIPS is perceptual loss [Zhang et al. 2018] between the tar-
+gets and generated images. BGC is computed as in Eq.7, but style is
+defined as w+ and 𝜂, and we use a preprocessing operator 𝑃(g𝑖) that
+blurs the black-on-white input and sets pure white pixels to 1 and
+the rest to 0, producing a conservative estimate of the background
+region. 𝑃prevents penalizing the generator for hallucinating a cus-
+tom edge for the stroke, an important aspect of a brush. We found
+𝛾= 0.1 sufficient to produce high-quality interactive styles.
+While it is tempting to remove the requirement of paired inputs
+for style embedding, the target geometry provides important guid-
+ance for control qualities of the resulting style. For example, in Fig.7c,
+embedding pom-pom style using a precise segmentation map as the
+ACM Trans. Graph., Vol. 41, No. 6, Article 269. Publication date: December 2022.
+
+
+===== PAGE 10 =====
+269:10
+•
+Shugrina et al.
+(a) Style interpolation in the W space.
+(b) Style interpolation between projected styles in the W+ and noise space.
+(c) Sketch stylization using patch-based synthesis, interpolation of styles.
+(d) Style blending during drawing
+Fig. 8. Style Interpolation and Line Drawing Stylization: Our method allows interpolation of brushes (a, b). The interactive painting engine (§4.4) can also
+be used for automatic line drawing stylization (c, where middle style is interpolated). Finally, feature blending makes it possible to blend multiple styles while
+drawing a single artwork (d), ©Maria Shugrina.
+geometry results in a style that takes all cues on stroke boundary
+from g input, producing solid pom-pom-textured lines (top). On
+the other hand, using a solid stroke as guidance during optimiza-
+tion results in a style that attempts to break up novel strokes into
+pom-pom pieces (bottom). In practice, we use thresholded targets as
+geometry to embed most styles in our examples, and would like to
+consider optimizing for additional control qualities in future work.
+5.3
+Style Search using CLIP
+Many methods have been developed for semantic editing of images
+using GANs [Härkönen et al. 2020; Ling et al. 2021; Shen et al. 2020;
+Zhu et al. 2021] for domains such as human faces and cars, where
+semantics have a well-defined meaning. For example, faces have
+poses, hair and skin color and facial expressions – universal modes
+of variation recognizable to every one. Even unsupervised methods
+like [Härkönen et al. 2020] rely on intuition about semantics to
+demonstrate meaningful edit directions. In trying to apply such
+methods to exploration of our latent space we came upon the real-
+ization that no such standard semantic controls exist for the space of
+drawing media. Even professional artists in our user study (§7), well
+versed in the terminology of the field, used non-standard metaphors
+to describe qualities of the brushes, for example: "these look very
+biological, they remind me of DNA", "this looks like cement", "this
+brush reminds me of lizard skin", "this one looks like watercolor
+when you try to get rid of it using a paper towel". Inspired by these
+observations, we prototype a flexible natural language search over
+the latent space, rather than trying to define several high-level di-
+rections that capture fixed variations.
+We leverage CLIP [Radford et al. 2021], a model trained on large
+paired corpora of text and images, making it possible to map text
+and images into the same embedding space. We follow the approach
+in §5.2 and optimize for w+ and noise 𝜂, given a geometry dataset
+G and natural language query q, using the following loss:
+Lclip = CLIP(q, x𝑖) + 𝛾BGC𝑃(w+,𝜂, g𝑖) + 𝜃L𝑃
+𝑔𝑒𝑜(g𝑖,𝐴),
+(9)
+where the quantity is averaged for a mini-batch of {𝑔𝑖} ∈G, CLIP
+is cosine similarity between the text embedding of q and image
+embedding of the generated patch x𝑖, and BGC is the same as in Eq.8.
+Unlike embedding, where paired geometry forces the optimization
+toward controllable styles, we found CLIP and BGC alone result in
+very difficult to control styles, and add additional geometric loss
+from Eq.4. This addition dramatically improves control.
+Ideally, queries should retrieve styles in real time, but embed-
+ding optimization can take minutes to converge, especially with
+the larger batch sizes (See §5.2). To warm-start optimization, we
+perform fast search over w samples (5000, filtered by BGC ≥0.9),
+and start optimizing from the w closest to the input query q. This
+cuts down iterations by 10x, from on average 2000 to only 200. With
+precomputed CLIP embeddings for styles, initial search provides
+an instantaneous (35ms) initial guess for the style. Subsequent op-
+timization takes on average 48 seconds on A6000 GPU, and it is
+possible to continuously update brush for interactive preview.
+5.4
+Style Interpolation
+As any GAN, Neural Brushstroke Engine allows interpolation of
+styles in the latent space (Fig.8a). To our knowledge, ours is the
+first system to support interpolation between interactive drawing
+tools. With our automatic generation (§4.4) we can also interpolate
+between line drawing stylizations (Fig.8b, middle style) and also
+within a single artwork (Fig.8d) by leveraging feature blending (§4.2).
+6
+EXPERIMENTS AND EVALUATION
+In this section we present our experimental setup, and main results.
+See SM for details on data and experiments and more results.
+ACM Trans. Graph., Vol. 41, No. 6, Article 269. Publication date: December 2022.
+
+
+===== PAGE 11 =====
+Neural Brushstroke Engine:
+Learning a Latent Style Space of Interactive Drawing Tools
+•
+269:11
+(a) Data used for our experiments.
+(b) Strong 𝐸𝑔𝑒𝑜and weak 𝐸Δ𝑔𝑒𝑜encoder reconstructions.
+(c) Ablation studies for generator training.
+Fig. 9. Training Data and Ablations: refer to §6.1, §6.2 and §6.3.
+6.1
+Datasets and Metrics
+We informally captured two style datasets (Fig.9a) using a hand-
+held mobile phone. Style 1 contains 146 scribbles of common phys-
+ical and digital tools like paints and crayons. Style 2 contains 241
+photos of eclectic materials, like ribbons and beads. To obtain patch
+datasets X1 and X2, we draw random patches and augment them
+with standard image processing, expanding the training set diversity.
+As a proxy for user control, we use a synthetic geometry dataset
+of random splines (Fig.9a), cut into a patch dataset G. It is not our
+goal to generate this exact geometry, but to let the generator styl-
+ize strokes with realistic edges, shadows and splatters. To support
+softer edge losses, we automatically preprocess G into a tri-band
+dataset, where curve boundaries are marked "uncertain". In Eq.4, the
+tri-band operator Δ(g) converts uncertain regions into gray prior
+to loss computation. This is only used for the loss.
+Like other GANs, our model is challenging to evaluate. We mea-
+sure performance along two axes. To quantify control, we use
+BGC (Eq.7). For diversity, we rely on Fréchet Inception Distance
+(FID) [Heusel et al. 2017], a standard metric for distribution mis-
+match between training and generated images. Note that we use
+pre-processed real geometry for FID computation. Our preliminary
+test (See SM) validates FID as a reasonable metric for style diver-
+sity, but we also observe below that it cannot be trusted absolutely.
+Compared to datasets like faces, our data is very unstructured, and
+matching FID results on other datsets is a non-goal.
+6.2
+Training Settings and Variables
+Our default training setup uses resolution 𝐻= 128 and injects
+geometry from 𝑓0 and 𝑓1 of 𝐸𝑔𝑒𝑜at the 8𝑥8 and 16𝑥16 Synthesis
+Blocks (§3.3). We keep the autoencoder architecture fixed (see SM),
+but experiment with two trained variants: a standard 𝐸𝑔𝑒𝑜trained
+on G, and a weaker, less precise 𝐸Δ𝑔𝑒𝑜trained by applying Δ (§6.1) to
+the ground truth before computing the loss (See Fig.9b). Similarly,
+we experiment with the standard L𝑔𝑒𝑜(Eq.4) and a weaker LΔ𝑔𝑒𝑜
+that uses Δ. Finally, we test using the geometry loss weighted by𝛾in
+the main𝐺update step, or instead using a separate geometry update
+phase activated every 𝑇𝑔𝑒𝑜= 200 iterations (§3.5). See bottom of
+Fig.9c for details on variants. All ablations use Style 1.
+We run geometry warm-starting for 50K images and overall train-
+ing for 10M images (see SM, B.1). In all cases, geo_layers(𝐺) (Alg.1)
+are set to the last synthesis layer and the ToTriad layer, which we
+found to work more consistently. We report quantitative results
+prior to geometry finetuning, and only apply finetuning for 1M
+images for all qualitative results (𝑎,𝑏,𝑐= 0.5 in Eq.5). Finetuning
+dramatically improves the practical usability of our model (See Fig.6
+and SM), but improved control without degrading quality has only
+been observed for models that already have a higher than random
+BGC. Therefore, tracking this metric during training is important.
+ACM Trans. Graph., Vol. 41, No. 6, Article 269. Publication date: December 2022.
+
+
+===== PAGE 12 =====
+269:12
+•
+Shugrina et al.
+(a) Strokes in random styles from Styles 1 model
+(b) Strokes in random styles from the Styles 2 model
+(c) watercolor
+(d) playdoh
+(e) pastels
+(f) "candy cane"
+(g) "Burnt Umber oil paint"
+Fig. 10. Qualitative Results: Interactive strokes in random styles (a,b) and interactive drawings with color control and compositing using embedded styles
+(c,d,e) or CLIP-based styles (f,g) . Model trained on Styles 1 is used for c,e,g. Model trained on Styles 2 is used for d,f. All art ©Maria Shugrina.
+6.3
+Ablations
+While ablating design choices above, we discovered high sensitivity
+of training to the random network initialization. Thus, we take
+an unconventional approach and plot the distribution of metrics
+across 5 runs with different random seeds. For each run we pick the
+checkpoint with the lowest FID score. Refer to Fig.9c.
+We have significantly modified StyleGAN2 architecture, by adding
+intermediate outputs and injecting geometry. We fist train vanilla
+StyleGAN2 (Fig.9c, A) on our unstructured domain, then add ToTriad
+layer (B). Because ToTriad layer necessarily constrains the output
+image space to linear blends of three colors, a significant degra-
+dation in the FID is expected. What is surprising is that despite a
+nearly 4x jump in FID from A to B, the actual fake images for B
+look more natural to the naked eye (top row). We therefore do not
+take this degradation too seriously, but we have observed FID to
+yield meaningful comparison across the runs of our model. Next,
+we inject geometry using default settings without applying any
+geometric losses (C). This modification causes the sudden jump in
+training instability. While we have tried some initial approaches,
+we leave further investigation to future work.
+Among D-L variants of our model, F and I provide the lowest (best)
+median FID with fewer outliers, and higher (better) or comparative
+median BGC. Both of these runs use geometry phase𝑇𝑔𝑒𝑜= 200 and
+either weak encoder and exact L𝑔𝑒𝑜(F) or precise encoder and tri-
+band LΔ𝑔𝑒𝑜(I). The plain variant (D) using only raw G fails to reach
+the best FID values for any runs. We next examine variants of F and I
+runs that instead use main𝐺update phase for geometric loss (G,H,L).
+For higher geometric loss𝛾(H,L), at least one of the runs destabilizes
+with a very high FID. In addition 𝐵𝑐𝑙𝑒𝑎𝑟for all three, including G
+with a more reasonable FID range, has very low outliers, signaling
+that geometric loss both affects the 𝐺quality and fails to make a
+significant difference on controllability when applied in the main
+phase. Skipping warmstarting (J) degrades FID compared to (I). We
+hypothesize that this is because the geometric loss interferes with
+the loss on the generator if the initialized network skews toward
+picking a different alpha for the background. Finally, injecting only
+𝑓0 at 8𝑥8 block completely degrades background control (L). While
+the best trained variants (F,I) appear similar by the metrics, with
+F perhaps slightly better, we observe that I feels more controllable
+during interactive drawing.
+6.4
+Qualitative Results and Applications
+All qualitative results come from two models trained on Style 1 and
+2 with condition I (§6.3). While we observed great diversity and
+interesting novel appearance in random brushes from our model
+(Fig.10a,b), the more powerful aspect of Neural Brushstroke Engine
+is its ability to generalize to unseen styles, enabling interactive
+drawing with a broad range of style targets (Fig.10,c-g).
+6.4.1
+Brush Style Embedding. We modify the default settings of
+StyleGAN2 [Karras et al. 2020b] following §5.2 and set noise regu-
+larization to 10. We optimize for 5000 steps, but terminate if LPIPS
+fails to improve for 100 iterations. First, we show results of training
+styles embedded into the corresponding models (§11a). Note that
+all pictures are drawn interactively with the optimized styles. For
+traditional media (Style 1), we observe excellent match between
+optimized styles and targets, even with noisy targets (Fig.11a, 3),
+with optimized styles mimicking watercolor (1), viscous paint (2),
+oil pastel (3), dry paintbrush (4), and crayon (5). The large scale
+structures of Style 2 are harder for our generator to replicate, as
+nothing in its architecture ensures consistency of larger structures
+like beads across patches. The very motivation for constructing
+Style 2 dataset was to push the limits of this method and show how
+future work could improve on our technique. Still, we observe that
+training styles embed into Style 2 model to achieve a similar feel,
+and contain fine aspect like frilly edge of lace (6), shiny bead-like
+pieces (7), shadows (8), textural elements of lego (9), and the crease
+of the playdoh line (10). Good embedding of training styles suggests
+that the latent space covers the training distribution well.
+ACM Trans. Graph., Vol. 41, No. 6, Article 269. Publication date: December 2022.
+
+
+===== PAGE 13 =====
+Neural Brushstroke Engine:
+Learning a Latent Style Space of Interactive Drawing Tools
+•
+269:13
+(a) Embedding training styles into corresponding models
+(b) Embedding unseen out-of distribution styles into the models: Styles 1 into model trained on Styles 2, and vice versa.
+Fig. 11. Style Embedding Results: Embedding training styles into the corresponding latent space (a) achieves excellent match to target media, with the
+exception of larger-scale structures of Style 2. Embedding unseen styles into the models (b) achieves surprisingly faithful results, showing generalization of our
+model. All drawings are made interactively using optimized styles. Closest training patches, retrieved for each target style using NNFM loss, confirm that the
+latent space expresses styles beyond its training set (b).
+6.4.2
+Brush Style Embedding Generalization. What speaks to the
+power of our approach more strongly is the ability of our trained
+models to generalize to unseen out-of-distribution styles (Fig.11b).
+We embed traditional media from Style 1 into the model trained
+on Styles 2 in (1-5), and achieve excellent look and feel of drawing
+tools from a model that has not seen any paint strokes, pencils,
+pastels or chalk (Styles 2 are entirely composed of non-traditional
+materials like beads and yarn). Similarly, the model trained on Styles
+1 is able to reconstruct bead-like brushes, yarn, and shadow effects
+(6,7,8) without ever seeing these styles during training. To show best
+matching training styles, we use nearest neighbor feature matching
+(NNFM) distance recently shown to be more robust for style transfer
+than Gram matrix in some cases [Zhang et al. 2022] to find a training
+patch (post augmentation) that can replicate the target style best.
+We show that for training styles (Fig.11a), NNFM correctly retrieves
+patches from the corresponding training image. On the other hand,
+closest training patches for out-of-distribution styles are visually
+very different from the target (Fig.11b). Of course, there are limits
+to generalization possible and Style 1 model struggles much more
+with the lego effect (Fig.11b, 9 vs Fig.11a, 9), but we find the overall
+quality of unseen style reconstructions rather astonishing for mod-
+els trained on our small-scale datasets. This generalization ability
+pushes us to explore further applications.
+6.4.3
+Optimizing Artwork Styles. Imagine a philosophically oppo-
+site approach to Neural Style Transfer ([Gatys et al. 2016] and others).
+Instead of a neural network that paints new images in the style of
+the target artwork automatically, cutting the user out of the creative
+loop, let us design an approach that will instead produce a toolbox of
+brushes that can be used to interactively create new art in the style
+of the target artwork. We show an exploration of this in Fig.12. In or-
+der to optimize brushes given target artwork, we first mark several
+ACM Trans. Graph., Vol. 41, No. 6, Article 269. Publication date: December 2022.
+
+
+===== PAGE 14 =====
+269:14
+•
+Shugrina et al.
+Fig. 12. Embedding Artwork Brushes: We mark several regions of target art (a, inset) and optimize a brush for each, enabling interactive drawing in the
+style of the target art. Insets show that our optimized brushes match target style much better than professional software. See SM for additional examples.
+Target art and other drawings ©Maria Shugrina.
+areas of the target as corresponding to the same kinds of brush (See
+Fig.12, onion inset). Then, we use the regions marked for each brush
+as the target geometry and perform style embedding (§5.2), with one
+small modification. Because input art contains other brushstrokes,
+we optimize for styles that composite into the target art in place
+of the marked brush regions (replaced with a background color)
+to match target patch appearance. While we leave thorough explo-
+ration of automatic techniques and robustness to future work, we
+have observed promising results for all examples we have tried (see
+SM for additional results). Fig.12 shows target artwork and novel
+artwork created using brushes retrieved from Neural Brushstroke
+Engine’s latent space. We have also attempted to match the look
+and feel of the drawing tools using two commercial applications,
+while color picking from the target artwork. For Procreate iPad
+App, the "Blotchy" brush most resembled the target, and in Adobe
+Fresco we selected marker brush, as that is the physical tool that
+was used for this art. Details in Fig.12 reveal a much more faithful
+reconstruction of target textures in the new art painted with our
+optimized brushes, than with commercial software. There are in
+fact infinite art media, as even something as simple as a marker will
+interact differently with every kind of paper, creating boundless
+variations. A continuous latent space is a way to begin modeling
+digital tools as diverse and expressive as the physical world.
+6.4.4
+Natural Language Style Search. In §5.3, we motivate natural
+language search over drawing tools and propose a technique to
+make it possible. Interactive drawings with brushes retrieved using
+just the shown text queries are shown in Fig.10f-g and Fig.13a. We
+include many more results of this early exploration in SM, Fig. S7.
+We find that the Style 2 model is able to mimic styles very far from
+the training set, like "pine needles" and "pink flowers" (Fig.13a).
+The same figure also shows the closest training patch to a given
+text query by finding a training patch, post augmentation, with the
+smallest cosine distance to the query text embedding. This exper-
+iment shows that our latent space can support styles beyond the
+training set. We further show in Fig.13, that the optimized styles can
+be continuously interpolated to produce a smoothly varying stroke
+in image space (see §5.4). In contrast to CLIP-based optimization
+of the final results (e.g. [Michel et al. 2021]), where there is only
+(a) Interpolation between CLIP brushes
+(b) Failure cases of CLIP optimization
+Fig. 13. Natural Language Brush Search: We show results of brushes
+retrieved from our latent space using only shown queries (a). We show that
+obtained brushes can also be smoothly interpolated, for example by mapping
+control such as stylus pressure to the alpha used for interpolation. Note
+that the closest training patches, retrieved using cosine similarity between
+query and image embedding, are quite far from the optimized styles and
+the text description. In b, we show some failure cases of CLIP-based style
+search. See SM for more results.
+one output that the user has no way of controlling, our approach re-
+turns a tool, which the user can explore and discover unanticipated
+uses for. We hope that this observation will inspire others to use
+text guidance to discover interactive tools. Text-based retrieval is
+a promising direction for future work, and the results of our sim-
+ple implementation are not always successful. In Fig.13b, we show
+failure cases, such as inability to find a suitable style (b1, query:
+"daisies"), and lack of understanding of basic properties like color
+ACM Trans. Graph., Vol. 41, No. 6, Article 269. Publication date: December 2022.
+
+
+===== PAGE 15 =====
+Neural Brushstroke Engine:
+Learning a Latent Style Space of Interactive Drawing Tools
+•
+269:15
+Fig. 14. Comparison of our patch-level generator against Linear Style [Li et al. 2019], MUNIT [Huang et al. 2018] and DRIT++[Lee et al. 2020], showing
+random styles (left) and fixed styles (right). Note that DRIT++ fails to generate consistent styles across geometry inputs.
+(b2, query: "birch"). Optimization with CLIP loss is also sensitive
+to the starting point and can get stuck in local minima, and in the
+cases when an appropriate style for a query exists in training data
+(b3), embedding of the style (§5.2, Fig.13b-3, far right) may produce
+more pleasing interactive styles than less-supervised search with
+a text query. We also found that CLIP embeddings were perhaps
+not as knowledgeable about art terminology and various kinds of
+paint. There is a big opportunity to teach our text-driven AI agents
+to understand not only the realistic world around us, but qualities
+of the tools we use to create.
+6.4.5
+Other Applications. Styles from the latent space of Neural
+Brushstroke Engine can also be interpolated interactively. For ex-
+ample, stylus pressure can map to an alpha weight in the linear
+interpolation of styles, and feature blending (§4.2) can provide ad-
+ditional smoothness. The image in Fig.8d was drawn by blending
+three CLIP-optimized styles from Fig.13. In addition to interactive
+applications, we show the ability of our generator and painting
+engine to stylize line drawings automatically (Fig.8c and SM Fig. S5).
+We hope that the latent space of interactive artistic tools will open
+new creative possibilities. Our differentiable stroke renderer could
+be used to improve stroke-based stylization techniques, including
+those using reinforcement learning (§2).
+Table 2. Quantitative Comparisons: we compare our generator with other
+unsupervised image-to-image translation methods using FID metric.
+Method
+FID
+Style Consistency
+(Styles1, real geometry)
+(for different inputs)
+[Li et al. 2019]
+108.64
+[Lee et al. 2020]
+74.74
+×
+Ours
+70.137
+6.5
+Comparison with Baselines
+We compare the performance of our generator 𝐺with comparable
+image-to-image translation methods that, like our method, 1) are
+trained on unpaired images from two domains and 2) can generate
+diverse translations for a single image in one domain to multiple
+images in the other domain. To our knowledge, state-of-the-art
+image-to-image translation methods fulfilling both 1) and 2) are
+MUNIT[Huang et al. 2018] and DRIT++[Lee et al. 2020]. We also
+compare against a fast style transfer method of [Li et al. 2019] that
+could power an interactive application. We used official repositories
+provided by the three methods, and first validated that training
+produced high-quality results on standard datasets these methods
+were tested on. Training was done using synthetic geometry as
+domain A and Style 1 as domain B.
+We show qualitative results in Fig.14. For MUNIT, we trained
+on 8 GPUs (the recommended setting) and base our settings on
+the edges2shoes config, summer2winter config, as well as sum-
+mer2winter with image_recon and content_recon set to 5, in be-
+tween the two official configs. We also took guidance from the
+method authors on training modifications, but could not avoid mode
+collapse, where nearly the same style is generated for all style sam-
+ples and inputs. While we have not exhaustively sampled settings,
+this experiment shows that this method does not work out of the box
+for our very unstructured domain. We had much better luck with
+DRIT++, which we modified to run on modern pytorch and trained
+using default settings. While DRIT++ achieves competitive look
+and FID (Tb.2), it has a flaw that precludes its use for patch-based
+generation in a given style. Observe results for different geometries
+and fixed style code in the right half of Fig.14. While our stylized
+patches are consistent across translations, DRIT++ produces dif-
+ferent brush styles for different input geometries, perhaps because
+imperfect style-content disambiguation is achieved. This means that
+no unsupervised image-to-image translation method can be used
+out of the box to replace our generator G, not to mention support
+compositing and color control. We also compare against the style
+transfer method of [Li et al. 2019] (retrained on our domain), and
+experimented with choosing different style and content layers. We
+found setting "r41" as the content layer and "r21", "r31" as the style
+layers produced the best results. Because this method does not learn
+a latent space of styles, we simply sample target styles from our
+training set to obtain random stylizations (Fig.14). This method is
+ACM Trans. Graph., Vol. 41, No. 6, Article 269. Publication date: December 2022.
+
+
+===== PAGE 16 =====
+269:16
+•
+Shugrina et al.
+Fig. 15. User study: Sample doodles created by our user study participants.
+Note that participants were not instructed to create a complete artwork,
+but to simply try a variety of styles (See §7).
+stable for a style and produces decent results, but contains repeti-
+tive artifacts and fails to match the realism of our strokes or FID.
+It also does not learn a latent space of styles, nor supports stroke
+compositing or color control.
+7
+USER STUDY
+We conducted an expert user study by recruiting 6 participants with
+professional-level experience in digital art. The goal of this kind of
+study is to collect insights on a specific application domain from
+highly skilled experts in that area. We chose this approach, because
+feedback from digital art practitioners carries much more weight
+than feedback from novices who will be a) unfamiliar with digital
+brushes that already exist, b) may be distracted by various aspects of
+working digitally, c) may respond positively because of the novelty
+of digital drawing, not through comparison with existing tools, or
+by analyzing if our novel brushes fit the requirements of their trade.
+The main goal was to evaluate the quality of the brush styles in
+the latent space of our generator, as well as the feel and usability
+of interactive drawing using Neural Brushstroke Engine. Note that
+it was not our goal to implement and test interfaces for all the
+applications suggested in §5.
+Participants self-identified as professional (5/6) or advanced (1/6)
+in digital art, and most were digital artists or illustrators by pro-
+fession (4/6). None of the participants were affiliated with the re-
+searchers or their institutions in any way. The user study was con-
+ducted in person, lasted about 30 minutes, and all participants were
+compensated with USD 20. As the hardware, we used iPad with
+Apple pencil running our web user interface in Safari browser and
+connected to a remote server located in another location on a dif-
+ferent network. The goal was to expose users to many different
+styles, the main contribution of Neural Brushstroke Engine, in a
+realistic environment. For models trained on Style 1 and Style 2, we
+generated test styles in 3 different ways:
+(1) Set A: Filtered 5K random styles for 𝐵𝐺𝐶> 0.9, resulting in
+2579 and 1919 brushes for Style 1 and 2
+(2) Set B: Hand-selected a few random styles we felt looked good,
+with 55 and 86 brushes for Style 1 and 2
+(3) Set C: Projected corresponding training styles into the latent
+space of Style 1 (146 brushes) and Style 2 (249) models
+During the study, we first asked participants to work with more
+traditional Styles 1, and then with Styles 2. For each model, we
+randomly presented 9 styles in each set A,B,C and users were asked
+to try 2-4 styles in each category. During the study, we recorded
+the screen and took notes on participants’ verbal feedback. After
+the study, we collected feedback using a questionnaire. While users
+were not asked to create complete artworks, Fig.15 shows some
+sketches generated during the sessions.
+7.1
+Feedback
+General feedback from users inspired us to try natural language
+search (§5.3). Participants picked very different styles from different
+sets as their favorite, showing that the style quality is evenly dis-
+tributed and subjective. Two users said that they preferred brushes
+where both colors in two-color recoloring figured prominently. One
+user preferred a style that has a different color when strokes cross
+each other. Some users preferred more traditional Styles 1, while
+others preferred funky Styles 2. Overall, participants reacted posi-
+tively and were surprised by the novel qualities of the drawing styles
+presented. When comparing styles resembling physical media, 4/5
+participants found that our system presented a wider range of styles.
+The main area for improvement was controllability of styles and
+latency. All participants cited style control as very mixed across
+styles, which prompts us to find better methods to filter for control.
+Users also suggested improvements to the two-color recoloring and
+other aspects. For example, live layer that can also mix colors and
+different media was suggested (something we prototyped later fol-
+lowing feedback). On a 5 point Likert scale, 4/6 participants said
+that they are very likely (score 5) to use brushes from our model,
+if integrated into their daily tools, 1 participant responded with
+4 (likely) and one with 3. Most users also said that brushes they
+tried would complement and not replace the brushes they use every
+day, which is the expected answer, as it is not our aim to replicate
+time-honed digital brushes that already exist.
+Overall, artist response suggests that Neural Brushstroke Engine
+is a viable approach to interactive drawing, and that styles sup-
+ported by our latent space are novel, interesting and useful even to
+practicing professionals.
+8
+CONCLUSIONS AND FUTURE WORK
+We presented Neural Brushstroke Engine, the first method to learn
+a latent space of interactive brushes from unlabeled images. In addi-
+tion to the trained generator, we presented the design of an interac-
+tive drawing system, which we tested with professional artists, and
+presented an array of applications, including style embedding, CLIP-
+based brush search, optimization of brushes for a target artwork
+and line drawing stylization. Our method models the rich variety
+of creative media and brings new flexibility and expressiveness to
+digital art. We hope that our work will not only open other creative
+applications for interactive drawing tools, but inspire other methods
+to use AI and deep learning to construct flexible tools that support
+direct user interaction and creativity.
+ACKNOWLEDGMENTS
+We thank the artists who tested our interface for inspiration and
+honest feedback. We are also grateful to Seung Wook Kim for early
+discussions, Anita Hu for sample CLIP code, Joyce Zheng for user
+study recruitment, and Ming-Yu Liu and Tsung-Yi Lin for help with
+ACM Trans. Graph., Vol. 41, No. 6, Article 269. Publication date: December 2022.
+
+
+===== PAGE 17 =====
+Neural Brushstroke Engine:
+Learning a Latent Style Space of Interactive Drawing Tools
+•
+269:17
+the MUNIT baseline. Finally, the first author thanks Yana Levin-
+Shugrina who aided heavily in the training data collection.
+REFERENCES
+Rameen Abdal, Yipeng Qin, and Peter Wonka. 2019. Image2stylegan: How to embed
+images into the stylegan latent space?. In Proceedings of the IEEE/CVF International
+Conference on Computer Vision. 4432–4441.
+Rameen Abdal, Yipeng Qin, and Peter Wonka. 2020. Image2stylegan++: How to edit the
+embedded images?. In Proceedings of the IEEE/CVF Conference on Computer Vision
+and Pattern Recognition. 8296–8305.
+Rameen Abdal, Peihao Zhu, John Femiani, Niloy J Mitra, and Peter Wonka. 2021a.
+CLIP2StyleGAN: Unsupervised Extraction of StyleGAN Edit Directions. arXiv
+preprint arXiv:2112.05219 (2021).
+Rameen Abdal, Peihao Zhu, Niloy J Mitra, and Peter Wonka. 2021b. Labels4free: Unsu-
+pervised segmentation using stylegan. In Proceedings of the IEEE/CVF International
+Conference on Computer Vision. 13970–13979.
+Rameen Abdal, Peihao Zhu, Niloy J Mitra, and Peter Wonka. 2021c. Styleflow: Attribute-
+conditioned exploration of stylegan-generated images using conditional continuous
+normalizing flows. ACM Transactions on Graphics (TOG) 40, 3 (2021), 1–21.
+Mahmoud Afifi, Marcus A. Brubaker, and Michael S. Brown. 2021. HistoGAN: Control-
+ling Colors of GAN-Generated and Real Images via Color Histograms. In Proceedings
+of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR). 7941–
+7950.
+Yuval Alaluf, Or Patashnik, and Daniel Cohen-Or. 2021. Restyle: A residual-based style-
+gan encoder via iterative refinement. In Proceedings of the IEEE/CVF International
+Conference on Computer Vision. 6711–6720.
+Aibek Alanov, Max Kochurov, Denis Volkhonskiy, Daniil Yashkov, Evgeny Burnaev,
+and Dmitry Vetrov. 2019. User-controllable multi-texture synthesis with generative
+adversarial networks. arXiv preprint arXiv:1904.04751 (2019).
+Amjad Almahairi, Sai Rajeshwar, Alessandro Sordoni, Philip Bachman, and Aaron
+Courville. 2018. Augmented cyclegan: Learning many-to-many mappings from
+unpaired data. In International Conference on Machine Learning. PMLR, 195–204.
+Ryoichi Ando and Reiji Tsuruno. 2010. Segmental Brush Synthesis with Stroke Images..
+In Eurographics (Short Papers). 89–92.
+David Bau, Hendrik Strobelt, William Peebles, Jonas Wulff, Bolei Zhou, Jun-Yan Zhu,
+and Antonio Torralba. 2019. Semantic photo manipulation with a generative image
+prior. ACM Transactions on Graphics (TOG) 38, 4 (2019), 1–11.
+William Baxter and Naga Govindaraju. 2010. Simple data-driven modeling of brushes.
+In Proceedings of the 2010 ACM SIGGRAPH Symposium on interactive 3D Graphics
+and Games. 135–142.
+William Baxter, Yuanxin Liu, and Ming C. Lin. 2004a.
+A viscous paint
+model
+for
+interactive
+applications.
+Computer
+Animation
+and
+Vir-
+tual
+Worlds
+15,
+3-4
+(2004),
+433–441.
+https://doi.org/10.1002/cav.47
+arXiv:https://onlinelibrary.wiley.com/doi/pdf/10.1002/cav.47
+William Baxter, Jeremy Wendt, and Ming C Lin. 2004b. IMPaSTo: A realistic, in-
+teractive model for paint. In Proceedings of the 3rd international symposium on
+Non-photorealistic animation and rendering. 45–148.
+William V Baxter and Ming C Lin. 2004. A versatile interactive 3D brush model. In 12th
+Pacific Conference on Computer Graphics and Applications, 2004. PG 2004. Proceedings.
+IEEE, 319–328.
+Urs Bergmann, Nikolay Jetchev, and Roland Vollgraf. 2017. Learning texture manifolds
+with the periodic spatial GAN. arXiv preprint arXiv:1705.06566 (2017).
+Andrew Brock, Jeff Donahue, and Karen Simonyan. 2018. Large scale GAN training for
+high fidelity natural image synthesis. arXiv preprint arXiv:1809.11096 (2018).
+Shu-Yu Chen, Feng-Lin Liu, Yukun Lai, Paul L Rosin, Chunpeng Li, Hongbo Fu, and Lin
+Gao. 2021. DeepFaceEditing: deep face generation and editing with disentangled
+geometry and appearance control. ACM Transactions on Graphics 40, 4 (2021).
+Zhili Chen, Byungmoon Kim, Daichi Ito, and Huamin Wang. 2015. Wetbrush: GPU-
+based 3D painting simulation at the bristle level. ACM Transactions on Graphics
+(TOG) 34, 6 (2015), 1–11.
+Yunjey Choi, Minje Choi, Munyoung Kim, Jung-Woo Ha, Sunghun Kim, and Jaegul
+Choo. 2018. Stargan: Unified generative adversarial networks for multi-domain
+image-to-image translation. In Proceedings of the IEEE conference on computer vision
+and pattern recognition. 8789–8797.
+Nelson Chu, William Baxter, Li-Yi Wei, and Naga Govindaraju. 2010. Detail-preserving
+paint modeling for 3D brushes. NPAR Symposium on Non-Photorealistic Animation
+and Rendering, 27–34. https://doi.org/10.1145/1809939.1809943
+Nelson S-H Chu and Chiew-Lan Tai. 2005. Moxi: real-time ink dispersion in absorbent
+paper. ACM Transactions on Graphics (TOG) 24, 3 (2005), 504–511.
+Cassidy J Curtis, Sean E Anderson, Joshua E Seims, Kurt W Fleischer, and David H
+Salesin. 1997. Computer-generated watercolor. In Proceedings of the 24th annual
+conference on Computer graphics and interactive techniques. 421–430.
+Stephen DiVerdi. 2013. A brush stroke synthesis toolbox. In Image and Video-Based
+Artistic Stylisation. Springer, 23–44.
+Stephen DiVerdi, Aravind Krishnaswamy, and Sunil Hadap. 2010. Industrial-strength
+painting with a virtual bristle brush. In Proceedings of the 17th ACM Symposium on
+Virtual Reality Software and Technology. 119–126.
+Zheng-Jun Du, Kai-Xiang Lei, Kun Xu, Jianchao Tan, and Yotam Gingold. 2021. Video
+recoloring via spatial-temporal geometric palettes. ACM Transactions on Graphics
+(TOG) 40, 4 (2021), 1–16.
+Noa Fish, Lilach Perry, Amit H. Bermano, and Daniel Cohen-Or. 2020. SketchPatch:
+Sketch Stylization via Seamless Patch-level Synthesis. ACM Trans. Graph. 39 (2020),
+227:1–227:14.
+Rinon Gal, Dana Cohen Hochberg, Amit Bermano, and Daniel Cohen-Or. 2021a. SWA-
+GAN: A style-based wavelet-driven generative model. ACM Transactions on Graphics
+(TOG) 40, 4 (2021), 1–11.
+Rinon Gal, Or Patashnik, Haggai Maron, Gal Chechik, and Daniel Cohen-Or.
+2021b. StyleGAN-NADA: CLIP-Guided Domain Adaptation of Image Generators.
+arXiv:2108.00946 [cs.CV]
+Leon A. Gatys, Alexander S. Ecker, and Matthias Bethge. 2015. Texture synthesis and
+the controlled generation of natural stimuli using convolutional neural networks.
+ArXiv abs/1505.07376 (2015).
+Leon A. Gatys, Alexander S. Ecker, and Matthias Bethge. 2016. Image Style Transfer
+Using Convolutional Neural Networks. 2016 IEEE Conference on Computer Vision
+and Pattern Recognition (CVPR) (2016), 2414–2423.
+Arnab Ghosh, Richard Zhang, Puneet K Dokania, Oliver Wang, Alexei A Efros, Philip HS
+Torr, and Eli Shechtman. 2019. Interactive sketch & fill: Multiclass sketch-to-image
+translation. In Proceedings of the IEEE/CVF International Conference on Computer
+Vision. 1171–1180.
+Ian J Goodfellow, Jean Pouget-Abadie, Mehdi Mirza, Bing Xu, David Warde-Farley,
+Sherjil Ozair, Aaron Courville, and Yoshua Bengio. 2014. Generative adversarial
+networks. arXiv preprint arXiv:1406.2661 (2014).
+Erik Härkönen, Aaron Hertzmann, Jaakko Lehtinen, and Sylvain Paris. 2020. Ganspace:
+Discovering interpretable gan controls. Advances in Neural Information Processing
+Systems 33 (2020), 9841–9850.
+Philipp Henzler, Niloy J Mitra, and Tobias Ritschel. 2020. Learning a neural 3d texture
+space from 2d exemplars. In Proceedings of the IEEE/CVF Conference on Computer
+Vision and Pattern Recognition. 8356–8364.
+Aaron Hertzmann. 1998. Painterly rendering with curved brush strokes of multiple sizes.
+In Proceedings of the 25th annual conference on Computer graphics and interactive
+techniques. 453–460.
+Aaron Hertzmann. 2002. Fast paint texture. In Proceedings of the 2nd International
+Symposium on Non-photorealistic Animation and Rendering. 91–ff.
+Aaron Hertzmann, Charles E Jacobs, Nuria Oliver, Brian Curless, and David H Salesin.
+2001. Image analogies. In Proceedings of the 28th annual conference on Computer
+graphics and interactive techniques. 327–340.
+Martin Heusel, Hubert Ramsauer, Thomas Unterthiner, Bernhard Nessler, and Sepp
+Hochreiter. 2017. Gans trained by a two time-scale update rule converge to a local
+nash equilibrium. Advances in neural information processing systems 30 (2017).
+Xun Huang and Serge Belongie. 2017. Arbitrary style transfer in real-time with adap-
+tive instance normalization. In Proceedings of the IEEE International Conference on
+Computer Vision. 1501–1510.
+Xun Huang, Ming-Yu Liu, Serge Belongie, and Jan Kautz. 2018. Multimodal Unsuper-
+vised Image-to-image Translation. In ECCV.
+Zhewei Huang, Wen Heng, and Shuchang Zhou. 2019. Learning to paint with model-
+based deep reinforcement learning. In Proceedings of the IEEE/CVF International
+Conference on Computer Vision. 8709–8718.
+Phillip Isola, Jun-Yan Zhu, Tinghui Zhou, and Alexei A. Efros. 2017. Image-to-Image
+Translation with Conditional Adversarial Networks. In 2017 IEEE Conference on
+Computer Vision and Pattern Recognition (CVPR). 5967–5976.
+https://doi.org/10.
+1109/CVPR.2017.632
+Wonjong Jang, Gwangjin Ju, Yucheol Jung, Jiaolong Yang, Xin Tong, and Seungyong Lee.
+2021. StyleCariGAN: caricature generation via StyleGAN feature map modulation.
+ACM Transactions on Graphics (TOG) 40, 4 (2021), 1–16.
+Tero Karras, Miika Aittala, Janne Hellsten, Samuli Laine, Jaakko Lehtinen, and Timo
+Aila. 2020a. Training generative adversarial networks with limited data. arXiv
+preprint arXiv:2006.06676 (2020).
+Tero Karras, Miika Aittala, Samuli Laine, Erik Härkönen, Janne Hellsten, Jaakko Lehti-
+nen, and Timo Aila. 2021. Alias-Free Generative Adversarial Networks. In Proc.
+NeurIPS.
+Tero Karras, Samuli Laine, and Timo Aila. 2019. A style-based generator architecture
+for generative adversarial networks. In Proceedings of the IEEE/CVF Conference on
+Computer Vision and Pattern Recognition. 4401–4410.
+Tero Karras, Samuli Laine, Miika Aittala, Janne Hellsten, Jaakko Lehtinen, and Timo
+Aila. 2020b. Analyzing and improving the image quality of stylegan. In Proceedings
+of the IEEE/CVF Conference on Computer Vision and Pattern Recognition. 8110–8119.
+Hyunsu Kim, Yunjey Choi, Junho Kim, Sungjoo Yoo, and Youngjung Uh. 2021. Exploiting
+Spatial Dimensions of Latent in GAN for Real-Time Image Editing. In Proceedings of
+the IEEE/CVF Conference on Computer Vision and Pattern Recognition. 852–861.
+ACM Trans. Graph., Vol. 41, No. 6, Article 269. Publication date: December 2022.
+
+
+===== PAGE 18 =====
+269:18
+•
+Shugrina et al.
+Mikyung Kim and Hyun Joon Shin. 2010. An Example-based Approach to Synthesize
+Artistic Strokes using Graphs. In Computer Graphics Forum, Vol. 29. Wiley Online
+Library, 2145–2152.
+Hanock Kwak and Byoung-Tak Zhang. 2016. Generating images part by part with
+composite generative adversarial networks. arXiv preprint arXiv:1607.05387 (2016).
+Hsin-Ying Lee, Hung-Yu Tseng, Jia-Bin Huang, Maneesh Singh, and Ming-Hsuan Yang.
+2018. Diverse image-to-image translation via disentangled representations. In
+Proceedings of the European conference on computer vision (ECCV). 35–51.
+Hsin-Ying Lee, Hung-Yu Tseng, Qi Mao, Jia-Bin Huang, Yu-Ding Lu, Maneesh Kumar
+Singh, and Ming-Hsuan Yang. 2020. DRIT++: Diverse Image-to-Image Translation
+via Disentangled Representations. International Journal of Computer Vision (2020),
+1–16.
+Xueting Li, Sifei Liu, Jan Kautz, and Ming-Hsuan Yang. 2019. Learning Linear Transfor-
+mations for Fast Arbitrary Style Transfer. In IEEE Conference on Computer Vision
+and Pattern Recognition.
+Yijun Li, Chen Fang, Jimei Yang, Zhaowen Wang, Xin Lu, and Ming-Hsuan Yang. 2017.
+Diversified texture synthesis with feed-forward networks. In Proceedings of the IEEE
+Conference on Computer Vision and Pattern Recognition. 3920–3928.
+Huan Ling, Karsten Kreis, Daiqing Li, Seung Wook Kim, Antonio Torralba, and Sanja
+Fidler. 2021. EditGAN: High-Precision Semantic Image Editing. In Advances in
+Neural Information Processing Systems (NeurIPS).
+Difan Liu, Matthew Fisher, Aaron Hertzmann, and Evangelos Kalogerakis. 2021a. Neu-
+ral Strokes: Stylized Line Drawing of 3D Shapes. In Proceedings of the IEEE/CVF
+International Conference on Computer Vision (ICCV). 14204–14213.
+Feng-Lin Liu, Shu-Yu Chen, Yu-Kun Lai, Chunpeng Li, Yue-Ren Jiang, Hongbo Fu, and
+Lin Gao. 2022. DeepFaceVideoEditing: Sketch-based Deep Editing of Face Videos.
+ACM Transactions on Graphics (Proceedings of ACM SIGGRAPH 2022) 41, 4 (2022),
+167:1–167:16.
+Guilin Liu, Rohan Taori, Ting-Chun Wang, Zhiding Yu, Shiqiu Liu, Fitsum A Reda, Karan
+Sapra, Andrew Tao, and Bryan Catanzaro. 2020. Transposer: Universal Texture
+Synthesis Using Feature Maps as Transposed Convolution Filter. arXiv preprint
+arXiv:2007.07243 (2020).
+Songhua Liu, Tianwei Lin, Dongliang He, Fu Li, Ruifeng Deng, Xin Li, Errui Ding, and
+Hao Wang. 2021b. Paint transformer: Feed forward neural painting with stroke
+prediction. In Proceedings of the IEEE/CVF International Conference on Computer
+Vision. 6598–6607.
+Jingwan Lu, Connelly Barnes, Stephen DiVerdi, and Adam Finkelstein. 2013. Realbrush:
+Painting with examples of physical media. ACM Transactions on Graphics (TOG) 32,
+4 (2013), 1–12.
+Michal Lukáč, Jakub Fišer, Paul Asente, Jingwan Lu, Eli Shechtman, and Daniel S`ykora.
+2015. Brushables: Example-based Edge-aware Directional Texture Painting. In
+Computer Graphics Forum, Vol. 34. Wiley Online Library, 257–267.
+Michal Lukáč, Jakub Fišer, Jean-Charles Bazin, Ondřej Jamriška, Alexander Sorkine-
+Hornung, and Daniel S`ykora. 2013. Painting by feature: texture boundaries for
+example-based image creation. ACM Transactions on Graphics (TOG) 32, 4 (2013),
+1–8.
+Liqian Ma, Xu Jia, Stamatios Georgoulis, Tinne Tuytelaars, and Luc Van Gool. 2018. Ex-
+emplar guided unsupervised image-to-image translation with semantic consistency.
+arXiv preprint arXiv:1805.11145 (2018).
+Morteza Mardani, Guilin Liu, Aysegul Dundar, Shiqiu Liu, Andrew Tao, and Bryan
+Catanzaro. 2020. Neural ffts for universal texture image synthesis. Advances in
+Neural Information Processing Systems 33 (2020).
+Oscar Michel, Roi Bar-On, Richard Liu, Sagie Benaim, and Rana Hanocka.
+2021.
+Text2Mesh: Text-Driven Neural Stylization for Meshes.
+arXiv preprint
+arXiv:2112.03221 (2021).
+Reiichiro Nakano. 2019. Neural painters: A learned differentiable constraint for gener-
+ating brushstroke paintings. arXiv preprint arXiv:1904.08410 (2019).
+Taesung Park, Alexei A Efros, Richard Zhang, and Jun-Yan Zhu. 2020. Contrastive learn-
+ing for unpaired image-to-image translation. In European Conference on Computer
+Vision. Springer, 319–345.
+Taesung Park, Ming-Yu Liu, Ting-Chun Wang, and Jun-Yan Zhu. 2019. Semantic image
+synthesis with spatially-adaptive normalization. In Proceedings of the IEEE/CVF
+Conference on Computer Vision and Pattern Recognition. 2337–2346.
+Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh, Sandhini
+Agarwal, Girish Sastry, Amanda Askell, Pamela Mishkin, Jack Clark, et al. 2021.
+Learning transferable visual models from natural language supervision. In Interna-
+tional Conference on Machine Learning. PMLR, 8748–8763.
+Md Atiqur Rahman and Yang Wang. 2016. Optimizing intersection-over-union in
+deep neural networks for image segmentation. In International symposium on visual
+computing. Springer, 234–244.
+Elad Richardson, Yuval Alaluf, Or Patashnik, Yotam Nitzan, Yaniv Azar, Stav Shapiro,
+and Daniel Cohen-Or. 2021. Encoding in style: a stylegan encoder for image-to-
+image translation. In Proceedings of the IEEE/CVF Conference on Computer Vision
+and Pattern Recognition. 2287–2296.
+Lincoln Ritter, Wilmot Li, Brian Curless, Maneesh Agrawala, and David Salesin. 2006.
+Painting With Texture.. In Rendering Techniques. 371–376.
+Chitwan Saharia, William Chan, Huiwen Chang, Chris A Lee, Jonathan Ho, Tim Sal-
+imans, David J Fleet, and Mohammad Norouzi. 2021. Palette: Image-to-image
+diffusion models. arXiv preprint arXiv:2111.05826 (2021).
+Patsorn Sangkloy, Jingwan Lu, Chen Fang, Fisher Yu, and James Hays. 2017. Scribbler:
+Controlling deep image synthesis with sketch and color. In Proceedings of the IEEE
+Conference on Computer Vision and Pattern Recognition. 5400–5409.
+Yujun Shen, Ceyuan Yang, Xiaoou Tang, and Bolei Zhou. 2020. Interfacegan: Inter-
+preting the disentangled face representation learned by gans. IEEE transactions on
+pattern analysis and machine intelligence (2020).
+Alon Shoshan, Nadav Bhonker, Igor Kviatkovsky, and Gerard Medioni. 2021. GAN-
+control: Explicitly controllable GANs. arXiv preprint arXiv:2101.02477 (2021).
+Maria Shugrina, Amlan Kar, Sanja Fidler, and Karan Singh. 2020. Nonlinear color triads
+for approximation, learning and direct manipulation of color distributions. ACM
+Transactions on Graphics (TOG) 39, 4 (2020), 97–1.
+Jaskirat Singh and Liang Zheng. 2021.
+Combining Semantic Guidance and Deep
+Reinforcement Learning For Generating Human Level Paintings. In Proceedings of
+the IEEE/CVF Conference on Computer Vision and Pattern Recognition. 16387–16396.
+Tuur Stuyck, Fang Da, Sunil Hadap, and Philip Dutré. 2017. Real-Time Oil Painting
+on Mobile Hardware. In Computer Graphics Forum, Vol. 36. Wiley Online Library,
+69–79.
+Jianchao Tan, Jose Echevarria, and Yotam Gingold. 2018. Efficient palette-based decom-
+position and recoloring of images via RGBXY-space geometry. ACM Transactions
+on Graphics (TOG) 37, 6 (2018), 1–10.
+Omer Tov, Yuval Alaluf, Yotam Nitzan, Or Patashnik, and Daniel Cohen-Or. 2021.
+Designing an encoder for stylegan image manipulation. ACM Transactions on
+Graphics (TOG) 40, 4 (2021), 1–14.
+Ting-Chun Wang, Ming-Yu Liu, Jun-Yan Zhu, Andrew Tao, Jan Kautz, and Bryan
+Catanzaro. 2018. High-resolution image synthesis and semantic manipulation with
+conditional gans. In Proceedings of the IEEE conference on computer vision and pattern
+recognition. 8798–8807.
+Rundong Wu, Zhili Chen, Zhaowen Wang, Jimei Yang, and Steve Marschner. 2018.
+Brush stroke synthesis with a generative adversarial network driven by physically
+based simulation. In Proceedings of the Joint Symposium on Computational Aesthetics
+and Sketch-Based Interfaces and Modeling and Non-Photorealistic Animation and
+Rendering. 1–10.
+Xian Wu, Chen Wang, Hongbo Fu, Ariel Shamir, Song-Hai Zhang, and Shi-Min Hu. 2022.
+DeepPortraitDrawing: Generating Human Body Images from Freehand Sketches.
+arXiv preprint arXiv:2205.02070 (2022).
+Wenqi Xian, Patsorn Sangkloy, Varun Agrawal, Amit Raj, Jingwan Lu, Chen Fang,
+Fisher Yu, and James Hays. 2018. Texturegan: Controlling deep image synthesis
+with texture patches. In Proceedings of the IEEE Conference on Computer Vision and
+Pattern Recognition. 8456–8465.
+Chufeng Xiao, Deng Yu, Xiaoguang Han, Youyi Zheng, and Hongbo Fu. 2021. Sketch-
+HairSalon: Deep Sketch-based Hair Image Synthesis. , 16 pages.
+Jianwei Yang, Anitha Kannan, Dhruv Batra, and Devi Parikh. 2017. Lr-gan: Layered
+recursive generative adversarial networks for image generation. arXiv preprint
+arXiv:1703.01560 (2017).
+Ning Yu, Connelly Barnes, Eli Shechtman, Sohrab Amirghodsi, and Michal Lukáč. 2019a.
+Texture Mixer: A Network for Controllable Synthesis and Interpolation of Texture.
+In IEEE Conference on Computer Vision and Pattern Recognition (CVPR).
+Xiaoming Yu, Yuanqi Chen, Shan Liu, Thomas Li, and Ge Li. 2019b. Multi-mapping
+image-to-image translation via learning disentanglement. Advances in Neural Infor-
+mation Processing Systems 32 (2019).
+Kai Zhang, Nick Kolkin, Sai Bi, Fujun Luan, Zexiang Xu, Eli Shechtman, and Noah
+Snavely. 2022. ARF: Artistic Radiance Fields.
+Richard Zhang, Phillip Isola, Alexei A Efros, Eli Shechtman, and Oliver Wang. 2018.
+The Unreasonable Effectiveness of Deep Features as a Perceptual Metric. In CVPR.
+Yuxuan Zhang, Huan Ling, Jun Gao, Kangxue Yin, Jean-Francois Lafleche, Adela Bar-
+riuso, Antonio Torralba, and Sanja Fidler. 2021. Datasetgan: Efficient labeled data
+factory with minimal human effort. In Proceedings of the IEEE/CVF Conference on
+Computer Vision and Pattern Recognition. 10145–10155.
+Nanxuan Zhao, Quanlong Zheng, Jing Liao, Ying Cao, Hanspeter Pfister, and Ryn-
+son WH Lau. 2021. Selective Region-based Photo Color Adjustment for Graphic
+Designs. ACM Transactions on Graphics (TOG) 40, 2 (2021), 1–16.
+Ningyuan Zheng, Yifan Jiang, and Dingjiang Huang. 2018. Strokenet: A neural painting
+environment. In International Conference on Learning Representations.
+Jun-Yan Zhu, Taesung Park, Phillip Isola, and Alexei A Efros. 2017. Unpaired Image-
+to-Image Translation using Cycle-Consistent Adversarial Networks. In Computer
+Vision (ICCV), 2017 IEEE International Conference on.
+Peihao Zhu, Rameen Abdal, John Femiani, and Peter Wonka. 2021. Barbershop: GAN-
+based image compositing using segmentation masks. arXiv preprint arXiv:2106.01505
+(2021).
+Zhengxia Zou, Tianyang Shi, Shuang Qiu, Yi Yuan, and Zhenwei Shi. 2021. Stylized
+neural painting. In Proceedings of the IEEE/CVF Conference on Computer Vision and
+Pattern Recognition. 15689–15698.
+ACM Trans. Graph., Vol. 41, No. 6, Article 269. Publication date: December 2022.
+
+

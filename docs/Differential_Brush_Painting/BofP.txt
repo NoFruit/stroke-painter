@@ -1,0 +1,1272 @@
+===== PAGE 1 =====
+Birth of a Painting: Differentiable Brushstroke Reconstruction
+YING JIANG1∗, JIAYIN LU1∗, YUNUO CHEN1∗, YUMENG HE1,2, KUI WU3, YIN YANG4, and CHENFANFU
+JIANG1
+Fig. 1.Painting Gallery.We visualize the reconstructed paintings produced by our method, along with one example of an intermediate painting stage. Our
+method reconstructs the painting process by progressively generating realistic brushstrokes, resulting in visually coherent and complete paintings.
+Painting embodies a unique form of visual storytelling, where the creation
+process is as significant as the final artwork. Although recent advances
+in generative models have enabled visually compelling painting synthesis,
+most existing methods focus solely on final image generation or patch-
+based process simulation, lacking explicit stroke structure and failing to
+produce smooth, realistic shading. In this work, we present a differentiable
+stroke reconstruction framework that unifies painting, stylized texturing,
+and smudging to faithfully reproduce the human painting–smudging loop.
+Given an input image, our framework first optimizes single- and dual-color
+Bézier strokes through a parallel differentiable paint renderer, followed by
+a style generation module that synthesizes geometry-conditioned textures
+across diverse painting styles. We further introduce a differentiable smudge
+operator to enable natural color blending and shading. Coupled with a coarse-
+to-fine optimization strategy, our method jointly optimizes stroke geometry,
+color, and texture under geometric and semantic guidance. Extensive exper-
+iments on oil, watercolor, ink, and digital paintings demonstrate that our
+approach produces realistic and expressive stroke reconstructions, smooth
+tonal transitions, and richly stylized appearances, offering a unified model
+for expressive digital painting creation.
+* indicates equal contributions.
+Affiliations: 1UCLA, 2USC, 3LIGHTSPEED, 4Utah
+1 Introduction
+As Picasso once said, “Painting is just another way of keeping a
+diary. ” Painting serves as a powerful medium for expressing human
+emotions and ideas in visual form. Most prior work on painting
+generation focuses on the finished artwork [10, 32, 42], while the cre-
+ative process itself remains concealed. Yet, observing how painters
+construct their work is equally meaningful. It not only allows audi-
+ences to appreciate and study the historical context and expressive
+techniques of art but also serves as a rich resource for learning
+how to paint for both humans and robots in reality [ 5, 35]. Since
+mastering painting requires substantial time and effort, and much
+instruction still depends on in-person teaching, generating painting
+processes offers new and more accessible pathways for learning and
+engaging with art.
+Previous works on painting process generation have taken primar-
+ily two directions: painting video generation [4, 38, 51] and painting
+stroke synthesis [15, 21, 27, 34, 43, 53]. For painting video genera-
+tion, the task is formulated as a video synthesis problem, where each
+frame represents a stage of the painting process. [38] and [4] explore
+diffusion models to predict time-lapse videos of artistic creation,
+arXiv:2511.13191v1  [cs.CV]  17 Nov 2025
+===== PAGE 2 =====
+2•Ying Jiang, et al.
+while [51] utilizes diffusion transformers to generate both past and
+future drawing processes. Although these works produce visually
+compelling videos thanks to powerful generative models, they do
+not provide explicit stroke information. Moreover, the transitions
+between frames are typically patch-based, making the generated
+painting workflows difficult to reproduce in real-world painting or
+existing digital painting software. In contrast, stroke-based painting
+generation methods explicitly represent brush strokes with para-
+metric primitives, such as Bézier curves, to model individual stroke
+geometries and use differentiable renderers to synthesize vectorized
+images. Recent work has explored stroke parameter searching [53],
+reinforcement learning [15], and transformer-based models [21] to
+generate brush stroke sequences. Nevertheless, neural painting ap-
+proaches [21, 53] often deviate from a realistic painting appearance.
+These methods render paint strokes defined by Bézier curves with
+single or dual colors on the canvas, lacking proper color blending
+between strokes. This limitation prevents them from producing com-
+plex textures, smooth tonal transitions, and natural shading effects
+characteristic of real paintings, resulting in hard stroke boundaries
+(Fig. 2 (a)) and an overall unrealistic visual appearance. Furthermore,
+when generating distinct painting styles such as oil, watercolor, or
+ink effects, these methods typically require training separate style-
+specific neural painters. This limitation restricts the generated out-
+puts to a narrow set of predefined styles and hinders generalization
+beyond the training distribution.
+Inspired by the progressive human painting process, which in-
+volves applying flat color fills followed by blending or smudging
+to create natural shading effects [16], we propose a differentiable
+stroke reconstruction framework that unifies stroke-based paint and
+smudge rendering with stylized texture generation, reproducing the
+paint-smudge loop to generate paintings with realistic shading and
+expressive textured strokes. Our pipeline is organized into three
+stages: (1)Paint Stroke Reconstruction, a parallel differentiable color-
+filling module; (2)Stroke Texture Stylization, a stylized texture syn-
+thesis module; and (3)Smudge Stroke Reconstruction, a differentiable
+smudging operation for color blending. Unlike traditional paint-
+ing software, where strokes are rasterized sequentially to match
+dynamically created user input, we introduce a parallel differen-
+tiable painting algorithm that renders single- or dual-color strokes
+directly from open Bézier curves in one step. With a differentiable
+paint renderer, we optimize Bézier-curve geometry parameters and
+per-stroke colors under geometric and semantic guidance. After
+extracting dual-color strokes and their geometric structures, we
+employ a StyleGAN-based generator to optimize latent textures con-
+ditioned on stroke geometry, producing diverse stylized appearances
+(e.g., watercolor, oil, and ink). The textured strokes are then com-
+posited onto the canvas and further refined through a differentiable
+smudge renderer, which generates smudged strokes and smooth
+color transitions to achieve natural shading. Emulating the iterative
+human painting process, we adopt a coarse-to-fine optimization
+strategy that progressively refines paint and smudge parameters by
+looping through painting, styling, and smudging, while spatially
+subdividing the canvas from coarse to fine patches. We evaluate
+our method on analog oil, watercolor, and ink paintings, as well as
+digital paintings, demonstrating visually compelling results with
+accurate reconstruction of stylized painting and smudge strokes.
+(a). Hard (b). Smooth (c). Textured painterly 
+Fig. 2. From left to right: (a) hard shading effects, (b) smooth shading effects,
+and (c) textured painterly shading effects.
+(a). Pixel-based (b). Closed-region (c). Open-curve
+Fig. 3. From left to right: (a) input pixel-based image, (b) vectorized paint-
+ing with closed-region representation, and (c) vectorized painting with
+open-curve representation. While the closed-region vectorization effectively
+captures fine details, its zigzag boundaries composed of multiple Bézier
+curves are less suitable for stroke-based painting and can only produce hard
+shading effects. In contrast, the open-curve representation models each
+stroke as a single cubic Bézier curve, blending colors through smudging.
+This approach more closely resembles human-created painting strokes and
+naturally produces smoother, more textured shading effects.
+In summary, our main contributions are as follows:
+• We propose a differentiable stroke reconstruction framework
+that unifies paint rendering, stylized texture generation, and
+smudge rendering, faithfully reproducing the paint–smudge
+loop with realistic and expressive strokes.
+• We introduce a parallel differentiable stamp-based paint
+renderer and a differentiable smudge renderer that captures
+both geometry and texture, enabling joint optimization of
+stroke geometry, color, and texture under novel semantic
+and gradient guidance.
+• We present a unified representation for stylized painting
+across diverse painting styles, and validate our approach
+through extensive experiments on various categories (oil,
+watercolor, ink, and digital paintings), demonstrating its
+effectiveness and expressiveness.
+2 Related Work
+2.1 Vector Graphics
+Vector graphics (VG) represents images parametrically as composi-
+tions of geometric primitives. Methods for generating SVGs fall into
+two broad families: data-driven and optimization-based. Data-driven
+approaches emit SVGs directly using sequence-to-sequence models
+[24, 31, 44], diffusion models [1], and transformers [3], but learning-
+based methods are often limited to generating vector images within
+the distribution of training data, struggling with out-of-domain data
+[23].
+===== PAGE 3 =====
+Birth of a Painting: Differentiable Brushstroke Reconstruction•3
+Optimization-based methods fit primitives by backpropagating
+through differentiable rasterizers to refine primitive parameters. Dif-
+fVG [20] first introduced a differentiable vector rasterizer for vector
+graphics learning. DiffVG [20] first introduced a differentiable ras-
+terizer for vector graphics learning and generation. Following this,
+[7, 13, 25, 46] have further explored layer-aware optimization with
+intersection-aware guidance [25], optimization in reduced subspaces
+with layer decomposition [7], top-down strategies with redundant
+stroke pruning [13], and semantic simplification methods [46] to
+obtain semantically consistent SVGs. However, most optimization-
+based approaches are time-consuming [7, 20, 25]. To improve effi-
+ciency, Bézier Splatting [23] leverages Bézier curves in combination
+with Gaussian splatting to achieve efficient vectorized image render-
+ing [23]. Beyond image-to-VG tasks, differentiable vector rasterizers
+have been coupled with text guidance to synthesize vector drawings
+and sketches from prompts [ 8, 34, 43, 48, 49]. However, existing
+vector image generation explores closed, flat-filled color regions
+parameterized by Bézier curves [ 7, 13, 20, 25, 43, 48, 49], lacking
+in creating smoothing shading effects. To achieve smooth-shaded
+vector images, diffusion curves [28] and gradient meshes [39] model
+gradient-based shading effects with topological control over the
+image in a single step. Unlike these global curve networks or control-
+mesh-based approaches, our goal is to explore open, stroke-based
+SVG primitives that can naturally reconstruct painting and shading
+effects accurately.
+2.2 Painting Video Generation
+With the advance of diffusion models, generation of high-quality im-
+ages and videos has become possible [2, 14, 33]. Prior work explores
+powerful generative models to synthesize the painting process as
+frame-by-frame sequences, effectively creating time-lapse videos
+that show how a painting emerges over time [4, 51]. Inverse Paint-
+ing [4] formulates the process as autoregressive image generation,
+leveraging image diffusion models with text and semantic guidance
+to produce each frame step by step. ProcessPainter [38] integrates
+image diffusion models with temporal attention to generate painting
+videos all at once. Going beyond forward processes, PaintsAlter [51]
+employs video diffusion models to achieve bidirectional painting
+process generation. Although these data-driven methods [ 4, 51]
+generate high-quality painting videos, they often lack temporal
+consistency. In addition, the differences across frames typically ap-
+pear as patchwise changes, lacking explicit stroke-level variations
+observed in human painting.
+2.3 Stroke-based Painting Generation
+Recently, Nakano [27] proposed a neural painter with adversarial
+training to generate brushstroke paintings. Similarly, Learn to Paint
+[15] and Paint Transformer [ 21] explore reinforcement learning
+(RL) and a transformer-based framework, respectively, to learn the
+colors and positions of strokes. However, neural painting methods
+[15, 21, 27, 53] tend to use only one or two colors per stroke, lacking
+the ability to generate textured strokes. Thus, these methods often
+resort to an excessive quantity of tiny strokes to represent color
+in paintings. To produce stylized strokes, Stylized Neural Painting
+[53] defined different stroke parameters and shapes for various
+painting styles, such as watercolor and oil painting. For each style, it
+was trained on different synthetic datasets and maintained separate
+weights. To generate a unified brushstroke style, Neural Brushstroke
+[36] leverages StyleGAN [18] to extract latent style codes from input
+strokes, which can then be used in painting to create strokes with
+similar styles. Inspired by this, our framework aims to generate
+unified strokes that reconstruct both stroke geometry and stroke
+textures from a painting. Most prior stroke generation approaches
+[15, 21, 27, 53] focus only on color-filling strokes, lacking color
+blending, whereas human painting typically follows a paint–smudge
+loop in which colors are painted and then blended through blurring
+or smudging to create complex shading effects [16, 37]. Furthermore,
+neural renderers draw strokes all at once, lacking the stamp-based
+brushstroke rendering [6] used in painting software. Our goal is
+to generate unified textured painting and smudging stamp-based
+brushstrokes that reproduce the human-like painting process and
+reconstruct natural smooth shading effects.
+3 Method
+In this section, we discuss our reconstruction pipeline in depth.
+Given an input painting, we progressively refine the canvas from
+coarse to fine by partitioning it into1× 1,2× 2,... ,𝑛×𝑛 patches.
+Within each sub-canvas, our pipeline proceeds through three phases
+(see Fig. 4 for illustration): (1)Paint stroke geometry reconstruction
+recovers the geometric shapes of painting strokes under color guid-
+ance. (2)Paint stroke texture stylizationoptimizes a style latent code
+conditioned on the reconstructed geometry to generate diverse
+stroke textures. (3)Smudge stroke reconstructionoptimizes the shapes
+of smudging strokes to reconstruct smooth shading effects. These
+three phases are applied iteratively from coarse to fine canvas levels,
+progressively refining the reconstructed painting and emulating the
+human paint–smudge loop.
+3.1 Stroke Representation
+To support the three-phase pipeline described above, we adopt a
+unified representation for both paint and smudge strokes. Each
+stroke is parameterized as{x𝐵, r, c,𝛼, w}, wherex𝐵 ={ x𝑠, x𝑒, x𝑐} are
+Bézier curve endpoints and control points,r ={𝑟 𝑠,𝑟𝑒} are endpoint
+radius,c ={ c𝑠, c𝑒} are endpoint colors, 𝛼 is transparency, and
+wis a style latent code controlling texture and appearance. We
+decompose the parameters into geometry Θgeo ={ x𝐵, r}, color
+Θcolor ={ c,𝛼} , and styleΘstyle ={ w} components. For paint strokes,
+we separately optimize their appearance (including geometry and
+color) Θapp
+paint ={ x𝐵, r, c,𝛼} and style components Θstyle
+paint ={ w}.
+For smudge strokes, we optimize only the geometry parameters
+Θsmudge ={x 𝐵,r}.
+3.2 Differentiable Stroke Rendering
+3.2.1 Stroke-based paint rendering.Given the paint stroke param-
+eters Θapp
+paint ={ x𝐵, c, r,𝛼} , our differentiable paint renderer 𝜙𝑝
+produces the corresponding pixel-based stroke 𝝉𝑝 =𝜙 𝑝(Θapp
+paint)
+(Fig. 5). Following standard stamp-based painting algorithms [ 6],
+a stroke is synthesized by placing a sequence of stamps along
+the Bézier path using parameter-uniform sampling. The stamp
+centers are computed by uniformly sampling the Bézier curve at
+===== PAGE 4 =====
+4•Ying Jiang, et al.
+Paint 
+Rendering StyleGAN Smudge 
+Rendering
+Input Image
+Masks
+(b). Paint Stroke Reconstruction (c). Stylized Texture Reconstruction  (d). Smudge Stroke Reconstruction
+Supervision
+(a). Guidance
+Fig. 4.Pipeline Overview.(a) Given a painting image as input, we extract segmentation masks and use both the RGB image and the masks as supervision
+for optimizing brush-stroke parameters. (b) We then perform parallel differentiable paint rendering to rasterize strokes, with the geometric parameters
+optimized under appearance- and semantic-guided constraints. (c) Next, we employ a StyleGAN-based texture generator to synthesize stylized textured
+strokes conditioned on the geometric structures, optimizing the texture parameters of the paint strokes. (d) Finally, we apply a differentiable smudge renderer
+to simulate color blending and produce smooth shading effects, optimizing the smudge parameters.
+Algorithm 1Stroke-Based Paint Rendering
+Require: Stroke parameters Θpaint ={ x𝐵 =( x𝑠, x𝑐, x𝑒), r =
+(𝑟𝑠,𝑟𝑒),c=(c 𝑠,c𝑒),𝛼}, number of stamps𝑁
+Ensure:Rendered pixel-based stroke𝝉 𝑝
+1:S←∅⊲Initialize stamp
+2:for𝑘=0to𝑁do
+3:𝑡 𝑘← 𝑘
+𝑁
+4:x 𝑘←(1−𝑡 𝑘)2x𝑠+2𝑡𝑘(1−𝑡 𝑘)x𝑐+𝑡 2
+𝑘 x𝑒
+5:𝑟 𝑘←(1−𝑡 𝑘)𝑟𝑠+𝑡𝑘𝑟𝑒
+6:c 𝑘←(1−𝑡 𝑘)c𝑠+𝑡𝑘 c𝑒
+7:𝑆 𝑘(x)=𝛼c 𝑘 if∥x−x 𝑘∥≤𝑟 𝑘, else0
+8:S←S∪{𝑆 𝑘}
+9:end for
+10:for allpixelsxdo⊲SDF-based rendering
+11:𝑘 ∗←arg min𝑘∥x−x 𝑘∥
+12:𝑝(x)←𝛼·c 𝑘∗
+13:end for
+14:return𝝉 𝑝 ={𝑝(x)}
+x𝑘 =( 1−𝑡𝑘)2x𝑠+ 2𝑡𝑘(1−𝑡𝑘)x𝑐+𝑡 2
+𝑘 x𝑒, where𝑡𝑘 = 𝑘
+𝑁(𝑘= 0,...,𝑁) ,
+with radius interpolated as 𝑟𝑘 =( 1−𝑡𝑘)𝑟𝑠+𝑡𝑘𝑟𝑒 and color inter-
+polated asc 𝑘 =( 1−𝑡𝑘)c𝑠+𝑡𝑘 c𝑒. Finally, we define a local stamp
+centered atx𝑘, parameterized by its radius𝑟𝑘, colorc𝑘, and trans-
+parency𝛼:
+𝑆𝑘(x)=𝑆(x−x 𝑘 ;𝑟𝑘,c𝑘,𝛼)=
+(
+𝛼c𝑘,∥x−x 𝑘∥≤𝑟 𝑘,
+0,otherwise.
+(1)
+For each image pixelx =(𝑥,𝑦) , its color is obtained by accumu-
+lating the contributions of all stamps whose support coversx, i.e.,
+those satisfying∥x− x𝑘∥≤𝑟 𝑘, combined through sequential alpha
+compositing:
+𝑝(x)=
+𝑁∑︁
+𝑘=0
+h
+𝑆𝑘(x)
+Ö
+𝑗<𝑘
+ 1−𝛼1[∥x−x 𝑗∥≤𝑟 𝑗]i
+.(2)
+Fig. 5.Differentiable Paint Renderer.Local stamps are uniformly sam-
+pled along the Bézier curve and parameterized by radius, color, and trans-
+parency. Unlike the vanilla stroke-based renderer (right), where interpolated
+areas are sequentially blended using the colors of neighboring stamps, we
+propose an distance-based model in which colors are determined by the
+closest stamp centers (left), allowing efficient parallelization.
+To avoid sequential accumulation, we also introduce a signed dis-
+tance function (SDF) representation where we evaluate:
+𝑑(x)=min
+𝑘
+ ∥x−x 𝑘∥−𝑟 𝑘
+,(3)
+which implicitly defines the stroke region by the zero-level set{x:
+𝑑( x)≤ 0}. Pixel colors are then computed in parallel by assigning
+each pixel to its nearest stamp center:
+𝑝(x)=c 𝑘∗𝛼, 𝑘 ∗ =arg min
+𝑘
+∥x−x 𝑘∥,(4)
+where𝑝( x) computes the pixel value of the rendered paint stroke
+𝝉𝑝 at locationx. This approach removes the need for sequential
+blending and allows efficient stroke construction on GPUs.
+3.2.2 Stroke-based smudge rendering.Given the smudge stroke pa-
+rameters Θsmudge ={ x𝐵, r} and an input canvas𝐼∈[ 0, 1]3×𝐻×𝑊 , our
+differentiable smudge renderer𝜙𝑠 produces the corresponding pixel-
+based smudge stroke: 𝝉𝑠 =𝜙𝑠(Θsmudge,𝐼). The smudge trajectory is
+obtained by uniformly sampling the Bézier curve as{x0,..., x𝑁},
+where each locationx𝑘 is associated with an interpolated radius𝑟𝑘.
+===== PAGE 5 =====
+Birth of a Painting: Differentiable Brushstroke Reconstruction•5
+Algorithm 2Stroke-Based Smudge Rendering
+Require: Smudge parameters Θsmudge ={ x𝐵 =( x𝑠, x𝑐, x𝑒), r =
+(𝑟𝑠,𝑟𝑒)}, canvas𝐼∈[0,1] 3×𝐻×𝑊 , number of stamps𝑁
+Ensure:Smudged stroke𝝉 𝑠
+1:Sample trajectory{x 0,...,x 𝑁}along Bézier curve
+2:for𝑘=0to𝑁do⊲Initialize stamp
+3:𝑡 𝑘← 𝑘
+𝑁
+4:x 𝑘←(1−𝑡 𝑘)2x𝑠+2𝑡𝑘(1−𝑡 𝑘)x𝑐+𝑡 2
+𝑘 x𝑒
+5:𝑟 𝑘←(1−𝑡 𝑘)𝑟𝑠+𝑡𝑘𝑟𝑒
+6:𝑆 𝑘(x)←{𝐼(x)|∥x−x 𝑘∥≤𝑟 𝑘}
+7:end for
+8:𝐶 0
+𝑘(x),𝐵𝑘(x)←𝑆 𝑘(x)for𝑘=0,...,𝑁
+9:for𝑘=0to𝑁do⊲Brush update
+10:𝑡 𝑘←ℓ𝑘/𝐿⊲ratio of arc length to total length
+11:K 𝑘,𝑖 =
+𝑡𝑎−1
+𝑖 (1−𝑡 𝑖)𝑏−1
+Í𝑘
+𝑚=0𝑡𝑎−1𝑚 (1−𝑡𝑚)𝑏−1 for𝑖=0,...,𝑘
+12:𝐵 𝑘(x)← Í𝑘
+𝑖=0K𝑘,𝑖·𝐵𝑖(x)
+13:end for
+14:for𝑘=1to𝑁do⊲Canvas update
+15:𝐶 𝑘
+𝑘(x)←𝛼 𝑐𝐵𝑘−1(x)+(1−𝛼 𝑐)𝐶𝑘−1
+𝑘 (x)
+16:𝐵 𝑘
+𝑘(x)←𝛼 𝑐𝐵0
+𝑘(x)+(1−𝛼 𝑠)𝐶𝑘
+𝑘(x)
+17:end for
+18:return𝝉 𝑠 ={𝐶 𝑁
+𝑁(x)}
+(a). Traditional brush stamp initialization (b). Traditional smudge rendering
+(d). Differentiable smudge rendering(c). Differentiable one-shot initialization
+Fig. 6.Differentiable smudge renderer.Blue, cyan, and red circles repre-
+sent the brush states and the initial and updated canvas states. In traditional
+smudge rendering, each brush stamp is initialized sequentially (a) and al-
+ternately updates the canvas and brush states in a recursive manner (b). In
+contrast, our proposed differentiable smudge renderer introduces a novel
+one-shot initialization that updates all brush states simultaneously (c) and
+updates brush stamps directly from the canvas, resulting in a more efficient
+computation graph (d).
+For eachx𝑘, we obtain a local stamp𝑆𝑘(x) by extracting a patch of
+size𝑟𝑘 centered atx𝑘 from the input canvas𝐼.
+Traditional smudging evolves the canvas state𝐶 and the brush
+state𝐵 in a recursive Markovian manner. Let𝐵𝑘 denote the internal
+brush state of stamp𝑘, and𝐶𝑛
+𝑘 denote the updated canvas state of
+stamp𝑘 at temporal step 𝑛. The canvas and brush states evolve
+following thealternating updatescheme (Fig. 6 (b)):
+𝐶𝑘
+𝑘(x)=𝛼 𝑐𝐵𝑘−1(x)+(1−𝛼 𝑐)𝐶𝑘−1
+𝑘 (x),(5)
+𝐵𝑘(x)=𝛼 𝑠𝐵𝑘−1(x)+(1−𝛼 𝑠)𝐶𝑘
+𝑘(x),(6)
+with initialization𝐵0(x)=𝐶 0
+0(x) (Fig. 6 (a)), where 𝛼𝑐∈[ 0, 1] is
+the canvas blending coefficient controlling how much of the pre-
+vious brush state remains on the canvas, and 𝛼𝑠 ∈ [0, 1] is the
+self-retention coefficient controlling how much pigment the brush
+retains from its own past state during the smudging process. How-
+ever, since each step extracts and splits stamps directly from the
+canvas, this formulation is difficult to make differentiable. Moreover,
+each current stamp depends only on the previous stamp and the
+current canvas state, resulting in a shallow computation graph with
+only one-step temporal dependencies.
+To overcome these limitations, we note that the recurrence can
+be simplified as 𝐵𝑘 =A𝐵 𝑘−1+B𝑆 𝑘, whereA=𝛼 𝑠+( 1−𝛼𝑠)𝛼𝑐,
+B=(1−𝛼 𝑠)(1−𝛼 𝑐), and unrolled to
+𝐵𝑘 =A 𝑘𝐶0
+0+
+𝑘∑︁
+𝑖=1
+A𝑘−𝑖B𝐶𝑖−1
+𝑖 ,
+which shows that past samples{𝐶𝑖} contribute with exponentially
+decaying weights. Inspired by this, we propose a one-shot initializa-
+tion with a length-aware distribution to generate𝐵𝑘 given initial
+canvas stamps (Fig. 6 (c)). Reparameterizing the trajectory by cu-
+mulative arc lengthℓ𝑖 with total length𝐿 and normalized positions
+𝑡𝑖 =ℓ𝑖/𝐿, we obtain
+𝐵𝑘 =
+𝑘∑︁
+𝑖=0
+K𝑘,𝑖𝐶0
+𝑖,K 𝑘,𝑖 = 𝑡𝑎−1
+𝑖 (1−𝑡 𝑖)𝑏−1
+Í𝑘
+𝑚=0𝑡𝑎−1𝑚 (1−𝑡 𝑚)𝑏−1,
+where𝑎,𝑏> 0. A special case 𝑎=𝑏= 1recovers the uniform
+kernelK𝑘,𝑖 = 1/(𝑘+ 1), corresponding to the arithmetic mean of
+all past samples. In addition, the kernel weightsK𝑘,𝑖 capture arc-
+length geometry and remain invariant to resampling density. This
+property enables the precomputation of the matrixK and the one-
+shot initialization of all brush states{𝐵𝑘}. After initializing brush
+stamps, we use it to update canvas states and adjust brush stamps
+from only canvas states recursively (Fig. 6 (d)):
+𝐶𝑘
+𝑘(x)=𝛼 𝑐𝐵𝑘−1(x)+(1−𝛼 𝑐)𝐶𝑘−1
+𝑘 (x),(7)
+𝐵𝑘
+𝑘(x)=𝛼 𝑠𝐵0
+𝑘(x)+(1−𝛼 𝑠)𝐶𝑘
+𝑘(x).(8)
+This ordered blending ensures pigment deposition aligns with the
+temporal smudging process.
+3.3 Stroke Reconstruction
+3.3.1 Phase I: Paint stroke appearance reconstruction.At this stage,
+we optimize only the appearance parameters of each paint stroke,
+Θapp
+paint, while keeping the style latentwfixed for texture generation
+in a later stage. To guide the optimization, we employ a combination
+of complementary objectives.
+===== PAGE 6 =====
+6•Ying Jiang, et al.
+Appearance Alignment.We employ a straightforward pixel loss,
+Lpixel =∥𝐼 𝑟−𝐼𝑡∥1, to minimize the discrepancy between the rendered
+image𝐼𝑟 and the ground truth𝐼𝑡 in raw color space, encouraging
+faithful reconstruction in RGB space. In addition, we incorporate
+a perceptual loss [ 36], defined as Lperc = Í
+ℓ∥𝐹ℓ(𝐼𝑟)−𝐹 ℓ(𝐼𝑡)∥ 1,
+where𝐹ℓ(·) denotes the feature map extracted from theℓ-th layer
+of a pretrained VGG network [ 17]. This loss captures both low-
+level cues (e.g., edges and colors) and high-level semantic patterns,
+providing perceptual guidance beyond raw pixel differences.
+Structural Guidance.To provide further structural guidance for
+the strokes, we utilize the gradient information of the image and
+propose the following loss: a gradient-based alignment lossLgrad =
+1
+𝐿
+Í
+ℓ(𝛼L (ℓ)
+mag+𝛽L (ℓ)
+dir), where𝐿 is the total arc length,Lmag and
+Ldir measure the difference in gradient magnitudes and orientations
+between𝐼𝑟 and𝐼𝑡 , respectively. This loss encourages the strokes to
+align with local geometry such as edges and contours. Addition-
+ally, to ensure each stroke aligns with the intended object region
+and to prevent strokes from crossing multiple objects and causing
+undesired blending, we introduce a layer-based segmentation loss,
+Lseg = Í
+𝑖≠𝑖∗|𝐴𝑠∩𝑀𝑖|, where𝐴𝑠 is the predicted stroke mask and
+𝑀𝑖 are the semantically segmented regions, extracted by Segment
+Anything (SAM) [19]. The index𝑖∗ =arg max𝑖|𝐴𝑠∩𝑀𝑖| corresponds
+to the intended object region.
+Optimization Regularization.To avoid vanishing gradients when
+strokes are far from their targets, we adopt an entropy-regularized
+optimal transport loss [53]:
+LOT =
+*
+𝐶,arg min
+𝑃∈U
+⟨𝐶,𝑃⟩− 1
+𝜆
+ 
+−
+𝑛∑︁
+𝑖,𝑗=1
+𝑃𝑖,𝑗 log𝑃𝑖,𝑗
+!+
+,
+which matches mass distributions between𝐼𝑟 and𝐼𝑡 and stabilizes
+optimization. Finally, an area regulation loss:
+Larea = 1
+𝑀
+𝑀∑︁
+𝑠=1
+exp(− area(𝐴𝑠)
+𝜂 )
+penalizes strokes with vanishing areas, ensuring that each stroke
+maintains a minimal effective footprint.
+The overall objective is a weighted combination of all these terms:
+Lapp =𝜆 pixelLpixel+𝜆 percLperc+
+𝜆gradLgrad+𝜆 segLseg+𝜆 OTLOT+𝜆 areaLarea,(9)
+where𝜆∗ are scalar weights balancing the contributions of each loss.
+3.3.2 Phase II: Stylized Texture Reconstruction.After obtaining the
+optimized appearance parameters Θapp
+paint, we keep them fixed and
+optimize the style latent codew. Optimizingwallows us to syn-
+thesize diverse brushstroke textures (e.g., oil, watercolor, ink, and
+digital painting styles). We adopt a conditional StyleGAN genera-
+tor [36], denoted as𝐺, to produce a stylized textured paint stroke
+𝝉𝑠𝑡 =𝐺(Θ app
+paint, w), wherewcontrols texture and appearance vari-
+ations. During optimization, onlywis updated, ensuring that the
+geometry remains unchanged.
+To guide stylization, we apply selective reconstruction losses
+from Section 3.3.1, specifically, the appearance alignment losses
+in RGB and latent spaces, as well as the gradient loss for localized
+structural preservation. These losses enforce color fidelity, structural
+similarity, and consistent shading, while the rest of the geometric
+and regularization terms are excluded, as the stroke shape is fixed.
+The overall objective for the stylization stage is the following:
+Lstyle =𝜆 pixelLpixel+𝜆 percLperc+𝜆 gradLgrad.
+3.3.3 Phase III: Smudge stroke reconstruction.At this stage, we op-
+timize the trajectories of smudge strokes. Each smudge stroke is
+parameterized by Θsmudge ={ x𝐵, r}. We use the same reconstruc-
+tion lossLapp as described in Section 3.3.1, since our optimization
+objectives remain the same. The primary difference lies in the dif-
+ferentiable renderer employed during each stage. Additionally, we
+assign greater weights to the gradient magnitude lossLmag to pro-
+vide stronger shading guidance, as well as the area regularization
+lossL area to prevent degenerate stroke configurations.
+3.4 Joint Optimization
+Inspired by the iterative human paint–smudge process, we adopt a
+coarse-to-fine optimization strategy. The canvas is hierarchically
+partitioned, starting from a coarse1× 1grid and progressively sub-
+dividing into finer grids:2× 2,··· , up to𝑛×𝑛 sub-canvases. At each
+level, we first reconstruct painting strokes with both appearance
+and stylization, followed by smudge stroke optimization to refine
+shading and blending. The output from each level initializes the
+next, enabling gradual refinement of details while preserving the
+global structure. At the final𝑛×𝑛 level, however, we perform only
+paint-stroke reconstruction, omitting smudge strokes to maintain
+edge sharpness and avoid over-smoothing.
+4 Experiments
+4.1 Implementation Details
+We implement our algorithm in PyTorch [29]. For paint stroke ap-
+pearance reconstruction and smudge stroke reconstruction, we use
+RMSprop with a learning rate of0.003. For stylized textured stroke
+reconstruction, we employ the Adam optimizer with a learning rate
+that linearly warms up from 0 to 0.01 over the first 5% of iterations,
+remains constant for the next 70%, and then follows a cosine decay
+schedule to 0 over the final 25%. The weights of each loss term are set
+as follows:𝜆pixel = 1.0,𝜆seg = 0.1,𝜆area = 0.02,𝜆grad = 0.1,𝜆OT = 0.2,
+and𝜆perc = 0.1. For stroke texture rendering, we use a pretrained
+StyleGAN generator [36] trained on128× 128patches. Following
+the initialization strategy of Stylized Neural Painting [53], we con-
+struct an error map by comparing the target image with the current
+canvas prediction. Specifically, we compute the L1 distance per
+pixel, summed across the RGB channels, to guide stroke placement
+toward regions with higher reconstruction error. All experiments
+are conducted on a single NVIDIA H100 GPU.
+4.2 Stroke Rendering Results
+Paint Stroke Rendering.We evaluate our proposed parallel dif-
+ferentiable paint stroke renderer with sampling densities of 10, 20,
+and 100 stamps on a1024 × 1024canvas using a stroke radius of
+100 pixels, and compare its performance against the traditional se-
+quential stroke-based rendering method. As shown in Fig. 7, our
+===== PAGE 7 =====
+Birth of a Painting: Differentiable Brushstroke Reconstruction•7
+(a). Sequential paint rendering (b). Parallel paint rendering (c). Difference
+Fig. 7.Sequential vs. parallel differentiable paint rendering.With
+10, 20, and 100 strokes (from top to bottom), we compare (a) sequential
+rendering and (b) our proposed parallel rendering. The results show that the
+parallel rendering achieves accuracy comparable to the sequential approach.
+(c) The difference visualization highlights regions of discrepancy, where
+brighter blue indicates larger differences.
+(a). Traditional smudge rendering 
+ (c). Difference(b). Differentiable smudge rendering 
+Fig. 8.Traditional vs. differentiable smudge rendering.With 10, 20,
+and 100 strokes (from left to right), the black dots indicate smudge tra-
+jectories, and the input is a single red circle. Comparing (a) traditional
+smudge rendering with (b) our differentiable smudge rendering using one-
+shot initialization, we observe that the proposed parallel rendering achieves
+accuracy comparable to the traditional method. In (c), the difference visual-
+ization shows that brighter blue regions correspond to larger differences.
+method maintains accurate rendering results across different sam-
+pling densities. To quantitatively assess efficiency and accuracy, we
+benchmark the proposed parallel stroke renderer against the sequen-
+tial Bézier stroke renderer under identical settings on an NVIDIA
+H100 GPU. For each test stroke, we record the forward-pass time
+averaged over five runs, with CUDA synchronization before and
+after each iteration to ensure that only GPU computation time is
+measured, excluding any I/O or visualization overhead. We report
+both the average rendering time and theL1 distance per pixel be-
+tween the two outputs. Our parallel implementation achieves up to
+a 7× speedup on 100-stamp strokes while maintaining comparable
+rendering fidelity (see Table 1).
+Table 1. Comparison between sequential and parallel paint rendering.
+# Stamp Seq. Time(ms) Par. Time(ms) Acc. Ratio↑ L 1 Dist.↓
+10 2.335 0.912 2.56×0.003171
+20 3.980 1.033 3.85×0.002896
+100 17.532 2.424 7.23×0.002177
+Smudge Stroke Rendering.We further evaluate the proposed differ-
+entiable smudge stroke renderer using sampling densities of 10, 20,
+and 100 stamps on a1024× 1024canvas with a stroke radius of 100
+pixels, and compare its performance against a vanilla stroke-based
+smudge rendering baseline. As the number of samples per stroke
+increases, the shading becomes progressively smoother. As shown
+Input
+ Generated Background Generated Foreground
+Fig. 9.Layered Painting Generation.Our method enables high-quality
+layer-aware painting generation from a single image.
+in Fig. 8, our proposed differentiable smudge renderer with one-shot
+initialization achieves accurate and stable smudge rendering results.
+4.3 Full Reconstruction Results
+Fig. 1 showcases reconstructed paintings generated with 1024 strokes
+across four representative styles, including watercolor, oil, digital,
+and ink, demonstrating that our method effectively reproduces vivid
+colors, smooth brush transitions, and faithful stylistic details. We
+refer readers to the supplementary document for extensive painting
+reconstruction results.
+4.4 Applications
+Layer-A ware Painting Generation.Layer decomposition has been
+widely used in image editing [40, 50] and vectorization tasks [25]. In
+our brushstroke reconstruction framework, we further incorporate
+layer decomposition into the painting generation pipeline, enabling
+alayer-aware generative painting processthat produces semantically
+structured results and facilitates subsequent layer-based editing.
+To generate decomposed painting layers, we first employ seman-
+tic segmentation model [22, 30] to separate foreground objects from
+the background. Since transparent and semi-transparent regions of-
+ten contain mixed visual content, we further use a vision–language
+model [41] to inpaint and refine the background layer. Subsequently,
+stroke reconstruction is performed within each segmented region,
+resulting in a hierarchical painting generation process that preserves
+both semantic separation and artistic coherence. As shown in Fig. 9,
+the proposed approach produces realistic and editable paintings
+with consistent textures across layers.
+Style Transfer.Our unified geometry–texture stroke representa-
+tion can be naturally decoupled to enable style transfer. To achieve
+this, we first perform paint and smudge stroke reconstruction across
+all grids, rather than alternating between them, to extract their geo-
+metric structures from the input image. During the style painting
+phase, we modify the perceptual loss to be computed with respect
+to a style reference image, while keeping all other loss terms defined
+by the input image. This design allows the system to preserve the
+structural layout and semantics of the input painting while adapting
+===== PAGE 8 =====
+8•Ying Jiang, et al.
+Fig. 10.Style Transfer.Using an input image and a style guidance im-
+age (bottom left), the proposed method achieves visually consistent and
+high-fidelity style transfer, preserving both content structure and artistic
+characteristics.
+its color distribution, brush texture, and material characteristics
+to match the target artistic style. As shown in Fig. 10, our method
+effectively transfers the desired artistic style while maintaining
+geometric structure.
+5 Evaluation & Comparison
+5.1 Datasets and Baselines
+Datasets.We comprehensively evaluate our method across di-
+verse painting domains, including watercolor, oil, ink, and digital
+paintings. For analog watercolor, oil, and ink paintings, we use the
+publicly available WikiArt dataset [26], from which we extract 20
+paintings per category. For digital paintings, we select 20 digitally
+recreated artworks from an online painting website 1, serving as
+representative examples of modern digital art styles. In total, we
+evaluate our method on 80 paintings to assess its effectiveness and
+expressiveness across a wide range of artistic styles.
+Baselines.We compare our method with three baselines that
+model the painting process using open strokes as primitives, sim-
+ilar to our framework: Stylized Neural Painting [53], Paint Trans-
+former [21], and Learning to Paint [15]. Additionally, we compare
+with O&R [13], which uses closed regions as primitives to synthesize
+painterly renderings. For all baselines, we adopt a4× 4canvas parti-
+tion (when applicable) assess reconstruction fidelity across varying
+stroke densities.
+5.2 Quantitative Comparison
+To quantitatively assess reconstruction quality, we compare our
+generated results with the baselines on the batch of 80 paintings,
+using configurations of 128, 256, and 512 strokes or regions, re-
+sulting in a total of 240 paintings for each method. We employ
+multiple complementary metrics, including Peak Signal-to-Noise
+Ratio (PSNR) [11], Structural Similarity Index (SSIM) [45], Learned
+Perceptual Image Patch Similarity (LPIPS) [52], and ResNet-based
+feature distance (FD) [12]. PSNR and SSIM evaluate pixel-level fi-
+delity and structural consistency between the reconstructed and
+reference paintings, reflecting low-level reconstruction accuracy.
+LPIPS measures perceptual similarity in a latent space, providing
+a more reliable indicator of texture coherence and structural real-
+ism. FD assesses the distributional difference between generated
+and reference images in the feature space of an Inception network,
+1https://www.pinterest.com/
+serving as a high-level perceptual metric for overall realism and
+style consistency.
+The quantitative evaluation results (Table 2) demonstrate that
+our method consistently outperforms all baselines across differ-
+ent metrics. Notably, under sparse stroke settings (128 strokes),
+our approach achieves a significant improvement over the others,
+indicating that the proposed framework can reconstruct images
+effectively even with limited strokes, thanks to its more expressive
+stroke representation. While O&R achieves the second-best perfor-
+mance at 128 and 256 strokes, its improvement diminishes at 512
+strokes. Although at higher stroke counts the PSNR of our method
+is comparable to that of Learning to Paint, our LPIPS and FD scores
+remain substantially better, suggesting that while those methods
+may recover coarse color alignment, they struggle to produce per-
+ceptually coherent strokes. Overall, our method achieves superior
+reconstruction fidelity and perceptual realism across varying stroke
+densities. Detailed per-category metric analyses are provided in the
+supplementary document.
+5.3 Qualitative Comparison
+We present qualitative comparisons with baseline methods in Fig. 11
+and Fig. 12. In Fig. 11 we showcase the paintings generated using
+1024-stroke reconstructions arranged in a5× 5grid across diverse
+subjects and painting styles. Our method produces reconstructions
+that are both faithful to the target content and rich in painterly
+texture. Additionally, we visualize the reconstruction results across
+different sparse stroke settings (128, 256, 512 strokes) in Fig. 12. We
+observe that with sufficient stroke budgets (Fig. 11), Learning to
+Paint [15] often produces coarse, grid-like patterns and oversimpli-
+fied regions, especially in high-frequency areas such as floral petals
+and grape clusters. PaintTransformer [21], while exploring prede-
+fined brush shapes, tends to generate boundary leaks and patchy
+artifacts and remains largely constrained to oil-like appearances
+due to its reliance on a single brush type. Stylized Neural Paint-
+ing [53] achieves visually appealing global tones but frequently
+loses local detail. O&R [13] accurately reproduces global color dis-
+tributions; however, its closed-region primitives make it difficult
+to reproduce in real digital painting software, as irregular enclosed
+shapes are challenging to replicate with standard brush operations.
+Under sparse stroke settings (Fig. 12), both our method and O&R
+capture the overall structure effectively with only 128 strokes, while
+LearningToPaint, Stylized Neural Painting, and PaintTransformer
+struggle to preserve contours and object boundaries. This demon-
+strates that our approach can better capture geometric and structural
+information even under limited stroke numbers. Moreover, almost
+all baseline methods lack color blending, resulting in hard shading
+effects. In contrast, our framework reconstructs natural shading and
+realistic tonal variations. Across all subjects and styles, our method
+achieves a robust balance between global structure and fine detail,
+producing results that are visually closer to the targets and more
+naturally painterly.
+5.4 Ablation Study
+We conduct ablation studies on key components of our framework,
+using the same input paintings as in Section 5.1. These experiments
+===== PAGE 9 =====
+Birth of a Painting: Differentiable Brushstroke Reconstruction•9
+Input Ours Learn to Paint Paint Transformer Stylized Neural Painting O&R
+Fig. 11.Qualitative Comparison.We compare our results with Stylized Neural Painting [ 53], Paint Transformer [21], Learning to Paint [15], and O&R [13].
+Our method produces more coherent shading and faithful texture details while preserving an aesthetically pleasing painterly style.
+evaluate the contribution of each proposed component to the final painting reconstruction quality, as well as the effect of varying
+stroke numbers on the overall reconstruction performance.
+===== PAGE 10 =====
+10•Ying Jiang, et al.
+Ours Stylized Neural PaintingPaint Transformer Learn to Paint
+Input
+128 256 512512256128
+Input
+O&R
+Fig. 12.Qualitative comparison on 128, 256 and 512 strokes.Compared to the baseline methods, our approach more effectively captures geometric
+contours and produces natural shading effects, even with sparse stroke numbers.
+Reconstruction Framework Design.We first evaluate the effective-
+ness of our three-phase framework design, which progressively
+refines painting reconstruction through paint stroke appearance,
+texture stylization, and smudge stroke optimization. As shown in
+Table 3, advancing from Phase I to Phase III consistently improves
+reconstruction quality. Phase I, which focuses solely on paint stroke
+appearance reconstruction with dual-color strokes, captures the
+overall structure but lacks stylized texture and smooth shading
+effects. Incorporating Phase II for texture stylization (Phase I–II)
+significantly enhances color fidelity and artistic expressiveness by
+generating diverse stroke textures that better match various paint-
+ing styles. Extending to Phase III with smudge stroke reconstruc-
+tion (Phase I–II–III) further improves shading continuity and tonal
+smoothness, producing more natural and perceptually coherent ren-
+derings. As illustrated in Fig. 13, the cat’s face exhibits softer and
+===== PAGE 11 =====
+Birth of a Painting: Differentiable Brushstroke Reconstruction•11
+Table 2.Quantitative Comparison.We evaluate overall average PSNR, SSIM, LPIPS, and FD across all painting styles. Higher PSNR/SSIM and lower
+LPIPS/FD indicate better reconstruction fidelity.
+Package 128 Brushes 256 Brushes 512 Brushes
+PSNR↑SSIM↑LPIPS↓FD↓ PSNR↑SSIM↑LPIPS↓FD↓ PSNR↑SSIM↑LPIPS↓FD↓
+Optimize&Reduce 19.108 0.5855 0.5637 13.91 20.652 0.6032 0.5174 13.03 22.429 0.6243 0.4700 11.53
+Paint Transformer 16.506 0.5324 0.6775 13.73 17.211 0.5380 0.6285 12.78 18.584 0.5521 0.5560 11.78
+Learning to Paint 19.181 0.5544 0.6309 16.84 21.521 0.5847 0.5700 14.82 23.155 0.6145 0.5231 11.27
+Stylized-Neural-Painting 20.288 0.5721 0.5654 16.45 21.154 0.5896 0.5272 15.53 21.430 0.6029 0.5006 13.70
+Ours 21.463 0.5993 0.5064 9.75 22.444 0.6168 0.4711 8.18 23.241 0.6335 0.4362 6.64
+Input Phase I-II-II w/o  reg. Phase I-II-II w/o  struct.
+Phase I-II-III Phase I-II Phase I
+Fig. 13.Ablation Study.We present results from different training stages:
+Phase I only, Phases I–II, and Phases I–II–III (full pipeline), as well as results
+obtained without regularization guidance and without structural guidance.
+We observe that the reconstruction quality consistently improves across
+all training phases, producing more accurate and coherent painting results,
+while both regularization and structural guidance play a crucial role in
+ensuring reconstruction fidelity.
+Table 3.Quantitative Ablation Study.We evaluate the results on 512
+brushstrokes across different stages and components of our method using
+the same metric as above.
+Method PSNR↑SSIM↑LPIPS↓FD↓
+Phase I 22.019 0.6695 0.4731 11.94
+Phase I-II 23.699 0.6880 0.4324 5.57
+Phase I-II-III w/o Structure Guidance 23.426 0.6853 0.4405 5.90
+Phase I-II-III w/o Regularization 22.750 0.6765 0.4629 6.64
+Phase I-II-III (Ours) 23.898 0.6909 0.4248 5.46
+more natural shading transitions, instead of the harsh, segmented
+appearance caused by discrete strokes.
+Structural Guidance.Two structure-guided losses, the gradient-
+based alignment lossLgrad and the layer-based segmentation loss
+Lseg, are adopted to ensure that reconstructed strokes accurately
+follow the intrinsic geometry of the painting. The segmentation loss
+Lseg constrains strokes to stay within object boundaries, thereby
+avoiding unwanted strokes across adjacent objects. TheLgrad, com-
+posed of orientation and magnitude terms, enforces the stroke flow
+to align with local edges and contours. As illustrated in Fig. 13, the
+absence ofLgrad andLseg leads to irregular boundaries near the
+cat’s right ear and disordered strokes on the forehead, introducing
+structural ambiguity and visual inconsistency. Together, these two
+losses contribute to geometrically aligned, semantically consistent,
+and perceptually coherent stroke reconstructions.
+Regularization.To avoid vanishing gradients when strokes are
+far from their target regions and to prevent them from collapsing
+into excessively small or vanishing areas, we introduce the optimal
+transport lossLOT and the area regularization lossLarea. As shown
+in Fig. 13, removingLOT andLarea leads to fragmented or missing
+strokes around the cat’s nose and hat, as well as noticeable color
+mismatches in the mouse region, resulting in sparse, unstable, and
+perceptually inconsistent reconstructions.
+Stroke Number.We assess the influence of stroke count on re-
+construction quality. As illustrated in Fig. 14, increasing the stroke
+count (128, 256, 512, and 1024) across four representative styles
+including watercolor, oil, digital, and ink progressively improves
+the reconstruction fidelity, resulting in finer structural details and
+richer tonal variations. Moreover, even with a low stroke count (128
+or 256), our method effectively preserves the global structure and
+maintains perceptually consistent shading, demonstrating strong ro-
+bustness and efficient stroke utilization in capturing complex visual
+content.
+5.5 User Study
+To evaluate the perceptual quality and human preference of gener-
+ated results, we conduct a user study involving fourteen participants.
+The study follows a perceptual evaluation protocol comparing our
+generative results against several state-of-the-art painting genera-
+tion methods using a two-alternative forced choice (2AFC) design
+[9, 47].
+Participants and Procedure.A total of 14 participants (including
+11novice users and3professional artists) are recruited for the study.
+During the experiment, participants are presented with pairs of
+generative painting results—one produced by our method and the
+baseline methods.The order of presentation is randomized to min-
+imize bias. Following the 2AFC protocol, participants were asked
+to choose their preferred reconstructed paintings in each pair ac-
+cording to five metrics: (a) Color Alignment (CA) assesses color
+===== PAGE 12 =====
+12•Ying Jiang, et al.
+1024 128256512Input
+Fig. 14.Stroke Number AblationFrom left to right: the input image followed by reconstructed results using 1024, 512, 256, and 128 strokes, respectively. The
+results demonstrate that the proposed method accurately reconstructs paintings across varying stroke counts and diverse painting styles.
+consistency in hue, tone, and saturation; (b) Texture and Shading
+(TS) measures the realism of surface texture and light–shadow tran-
+sitions; (c) Painting Style (PS) evaluates the coherence of strokes,
+palette, and abstraction with the intended style; (d) Shape Fidelity
+(SF) reflects the structural accuracy of objects and brushstrokes; and
+(e) Overall Quality (OQ) represents the overall visual realism and
+aesthetic appeal.
+Table 4.User Study.We evaluate 2AFC user preferences against the base-
+lines across five evaluation metrics: Color Alignment (CA), Painting Style
+(PS), Texture and Shading (TS), Shape Fidelity (SF), and Overall Quality
+(OQ). A score above 50% indicates that participants prefer our results over
+the respective baseline.
+Method CA↑TS↑PS↑SC↑OQ↑
+Stylized Neural Painting 75% 78% 78% 78% 77%
+Paint Transformer 82% 85% 81% 85% 84%
+Learning to Paint 78% 77% 76% 78% 77%
+O&R 66% 73% 72% 76% 70%
+In Table 4, we report the itemized user preferences for each base-
+line (whether users prefer our results over the baseline; a score
+above 50% indicates an overall more preferred result). Our method
+is consistently preferred across all evaluation criteria and baseline
+methods. Compared with the open-curve–based painting baselines
+(Stylized Neural Painting, Paint Transformer, and Learning to Paint),
+which tend to produce visually similar painterly textures and styles,
+and O&R (a closed-region–based vector graphics method) offers
+stronger color alignment. However, our method achieves superior
+performance across all perceptual dimensions, excelling not only in
+color alignment but also in producing more realistic textures and
+expressive styles. Participants particularly emphasized the natural
+color harmony, smooth shading effects, and diverse painting styles,
+ranging from oil to ink, in our generated results, highlighting the
+improved perceptual realism and artistic expressiveness achieved
+by the proposed framework.
+6 Conclusions
+We propose a differentiable stroke reconstruction framework that
+novelly unifies stroke-based paint and smudge rendering with styled
+texture generation. Our method reproduces the iterative paint-
+ing–smudging loop, yielding realistic painterly effects with smooth
+shading and expressive strokes. The framework generates stroke-
+based painting processes that emulate human-like painting and
+smudging, capturing the dynamic evolution of artwork while main-
+taining both structural fidelity and aesthetic expressiveness. We
+introduce a unified stroke representation that jointly models paint
+and smudge strokes, enabling consistent simulation of stroke depo-
+sition and color blending. A stylized texture reconstruction further
+enriches the results by producing diverse and visually coherent
+textures across different painting styles. Versatile experiments show
+our method generates realistic and expressive painting processes.
+Limitation and Future Work.Our approach has several limitations
+that suggest directions for future work. First, the current patch-
+based optimization strategy for painting and smudging, while effec-
+tive, remains somewhat rigid. The order of painting and smudging
+===== PAGE 13 =====
+Birth of a Painting: Differentiable Brushstroke Reconstruction•13
+operations within each grid patch is predefined, limiting flexibil-
+ity. Enabling dynamic alternation between painting and smudging
+strokes could better emulate the adaptive, iterative nature of human
+painting workflows.
+Another limitation lies in the stroke representation. Currently,
+stroke shapes are restricted to open Bézier curve parameterizations,
+which may not fully capture the irregular and diffusive boundaries
+often observed in watercolor or ink paintings. Incorporating more
+expressive stroke models, such as displacement-map–based defor-
+mations or parameterized boundary perturbations, could enable the
+reproduction of complex zigzag and diffusion patterns characteristic
+of fluid-based media.
+References
+[1] Ellie Arar, Yarden Frenkel, Daniel Cohen-Or, Ariel Shamir, and Yael Vinker. 2025.
+Swiftsketch: A diffusion model for image-to-vector sketch generation. InProceed-
+ings of the Special Interest Group on Computer Graphics and Interactive Techniques
+Conference Conference Papers. 1–12.
+[2] Andreas Blattmann, Tim Dockhorn, Sumith Kulal, Daniel Mendelevitch, Maciej
+Kilian, Dominik Lorenz, Yam Levi, Zion English, Vikram Voleti, Adam Letts, et al.
+2023. Stable video diffusion: Scaling latent video diffusion models to large datasets.
+arXiv preprint arXiv:2311.15127(2023).
+[3] Defu Cao, Zhaowen Wang, Jose Echevarria, and Yan Liu. 2023. Svgformer: Rep-
+resentation learning for continuous vector graphics using transformers. InPro-
+ceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition.
+10093–10102.
+[4] Bowei Chen, Yifan Wang, Brian Curless, Ira Kemelmacher-Shlizerman, and
+Steven M Seitz. 2024. Inverse painting: Reconstructing the painting process.
+InSIGGRAPH Asia 2024 Conference Papers. 1–11.
+[5] Lawrence Chen, Peter Schaldenbrand, Tanmay Shankar, Lia Coleman, and Jean
+Oh. 2025. Spline-FRIDA: Towards Diverse, Humanlike Robot Painting Styles
+with a Sample-Efficient, Differentiable Brush Stroke Model.IEEE Robotics and
+Automation Letters(2025).
+[6] Shen Ciao, Zhongyue Guan, Qianxi Liu, Li-Yi Wei, and Zeyu Wang. 2024. Ciallo:
+GPU-accelerated rendering of vector brush strokes. InACM SIGGRAPH 2024
+Conference Papers. 1–11.
+[7] Zheng-Jun Du, Liang-Fu Kang, Jianchao Tan, Yotam Gingold, and Kun Xu. 2023.
+Image vectorization and editing via linear gradient layer decomposition.ACM
+Transactions on Graphics (TOG)42, 4 (2023), 1–13.
+[8] Kevin Frans, Lisa Soros, and Olaf Witkowski. 2022. Clipdraw: Exploring text-
+to-drawing synthesis through language-image encoders.Advances in Neural
+Information Processing Systems35 (2022), 5207–5218.
+[9] Rinon Gal, Yael Vinker, Yuval Alaluf, Amit Bermano, Daniel Cohen-Or, Ariel
+Shamir, and Gal Chechik. 2024. Breathing life into sketches using text-to-video
+priors. InProceedings of the IEEE/CVF Conference on Computer Vision and Pattern
+Recognition. 4325–4336.
+[10] Bruno Galerne, Lara Raad, José Lezama, and Jean-Michel Morel. 2024. Scaling
+painting style transfer. InComputer Graphics Forum, Vol. 43. Wiley Online Library,
+e15155.
+[11] Rafael C Gonzalez. 2009.Digital image processing. Pearson education india.
+[12] Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. 2016. Deep residual
+learning for image recognition. InProceedings of the IEEE conference on computer
+vision and pattern recognition. 770–778.
+[13] Or Hirschorn, Amir Jevnisek, and Shai Avidan. 2024. Optimize & reduce: a top-
+down approach for image vectorization. InProceedings of the AAAI Conference on
+Artificial Intelligence, Vol. 38. 2148–2156.
+[14] Jonathan Ho, Tim Salimans, Alexey Gritsenko, William Chan, Mohammad
+Norouzi, and David J Fleet. 2022. Video diffusion models.Advances in neu-
+ral information processing systems35 (2022), 8633–8646.
+[15] Zhewei Huang, Wen Heng, and Shuchang Zhou. 2019. Learning to paint with
+model-based deep reinforcement learning. InProceedings of the IEEE/CVF interna-
+tional conference on computer vision. 8709–8718.
+[16] Ying Jiang, Pengfei Xu, Congyi Zhang, Hongbo Fu, Henry Lau, and Wenping
+Wang. 2024. Region-aware color smudging.IEEE Transactions on Visualization
+and Computer Graphics31, 4 (2024), 1999–2011.
+[17] Justin Johnson, Alexandre Alahi, and Li Fei-Fei. 2016. Perceptual losses for real-
+time style transfer and super-resolution. InEuropean conference on computer
+vision. Springer, 694–711.
+[18] Tero Karras, Samuli Laine, and Timo Aila. 2019. A style-based generator ar-
+chitecture for generative adversarial networks. InProceedings of the IEEE/CVF
+conference on computer vision and pattern recognition. 4401–4410.
+[19] Alexander Kirillov, Eric Mintun, Nikhila Ravi, Hanzi Mao, Chloe Rolland, Laura
+Gustafson, Tete Xiao, Spencer Whitehead, Alexander C Berg, Wan-Yen Lo, et al.
+2023. Segment anything. InProceedings of the IEEE/CVF international conference
+on computer vision. 4015–4026.
+[20] Tzu-Mao Li, Michal Lukáč, Michaël Gharbi, and Jonathan Ragan-Kelley. 2020.
+Differentiable vector graphics rasterization for editing and learning.ACM Trans-
+actions on Graphics (TOG)39, 6 (2020), 1–15.
+[21] Songhua Liu, Tianwei Lin, Dongliang He, Fu Li, Ruifeng Deng, Xin Li, Errui Ding,
+and Hao Wang. 2021. Paint transformer: Feed forward neural painting with stroke
+prediction. InProceedings of the IEEE/CVF international conference on computer
+vision. 6598–6607.
+[22] Shilong Liu, Zhaoyang Zeng, Tianhe Ren, Feng Li, Hao Zhang, Jie Yang, Qing Jiang,
+Chunyuan Li, Jianwei Yang, Hang Su, et al. 2024. Grounding dino: Marrying dino
+with grounded pre-training for open-set object detection. InEuropean conference
+on computer vision. Springer, 38–55.
+[23] Xi Liu, Chaoyi Zhou, Nanxuan Zhao, and Siyu Huang. 2025. B\’ezier Splatting for
+Fast and Differentiable Vector Graphics Rendering.arXiv preprint arXiv:2503.16424
+(2025).
+[24] Raphael Gontijo Lopes, David Ha, Douglas Eck, and Jonathon Shlens. 2019. A
+learned representation for scalable vector graphics. InProceedings of the IEEE/CVF
+International Conference on Computer Vision. 7930–7939.
+[25] Xu Ma, Yuqian Zhou, Xingqian Xu, Bin Sun, Valerii Filev, Nikita Orlov, Yun Fu,
+and Humphrey Shi. 2022. Towards layer-wise image vectorization. InProceedings
+of the IEEE/CVF Conference on Computer Vision and Pattern Recognition. 16314–
+16323.
+[26] Hui Mao, Ming Cheung, and James She. 2017. Deepart: Learning joint represen-
+tations of visual arts. InProceedings of the 25th ACM international conference on
+Multimedia. 1183–1191.
+[27] Reiichiro Nakano. 2019. Neural painters: A learned differentiable constraint for
+generating brushstroke paintings.arXiv preprint arXiv:1904.08410(2019).
+[28] Alexandrina Orzan, Adrien Bousseau, Holger Winnemöller, Pascal Barla, Joëlle
+Thollot, and David Salesin. 2008. Diffusion curves: a vector representation for
+smooth-shaded images.ACM Transactions on Graphics (TOG)27, 3 (2008), 1–8.
+[29] Adam Paszke, Sam Gross, Francisco Massa, Adam Lerer, James Bradbury, Gregory
+Chanan, Trevor Killeen, Zeming Lin, Natalia Gimelshein, Luca Antiga, et al. 2019.
+Pytorch: An imperative style, high-performance deep learning library.Advances
+in neural information processing systems32 (2019).
+[30] Nikhila Ravi, Valentin Gabeur, Yuan-Ting Hu, Ronghang Hu, Chaitanya Ryali,
+Tengyu Ma, Haitham Khedr, Roman Rädle, Chloe Rolland, Laura Gustafson,
+et al. 2024. Sam 2: Segment anything in images and videos.arXiv preprint
+arXiv:2408.00714(2024).
+[31] Pradyumna Reddy, Michael Gharbi, Michal Lukac, and Niloy J Mitra. 2021. Im2vec:
+Synthesizing vector graphics without vector supervision. InProceedings of the
+IEEE/CVF Conference on Computer Vision and Pattern Recognition. 7342–7351.
+[32] Hui Ren, Joanna Materzynska, Rohit Gandikota, David Bau, and Antonio Torralba.
+2024. Opt-In Art: Learning Art Styles Only from Few Examples.arXiv preprint
+arXiv:2412.00176(2024).
+[33] Robin Rombach, Andreas Blattmann, Dominik Lorenz, Patrick Esser, and Björn
+Ommer. 2022. High-resolution image synthesis with latent diffusion models. In
+Proceedings of the IEEE/CVF conference on computer vision and pattern recognition.
+10684–10695.
+[34] Peter Schaldenbrand, Zhixuan Liu, and Jean Oh. 2021. Styleclipdraw: Coupling
+content and style in text-to-drawing synthesis.arXiv preprint arXiv:2111.03133
+(2021).
+[35] Peter Schaldenbrand, Gaurav Parmar, Jun-Yan Zhu, James McCann, and Jean
+Oh. 2024. Cofrida: Self-supervised fine-tuning for human-robot co-painting.
+In2024 IEEE International Conference on Robotics and Automation (ICRA). IEEE,
+2296–2302.
+[36] Maria Shugrina, Chin-Ying Li, and Sanja Fidler. 2022. Neural brushstroke engine:
+learning a latent style space of interactive drawing tools.ACM Transactions on
+Graphics (TOG)41, 6 (2022), 1–18.
+[37] Maria Shugrina, Jingwan Lu, and Stephen Diverdi. 2017. Playful palette: an
+interactive parametric color mixer for artists.ACM Transactions on Graphics
+(TOG)36, 4 (2017), 1–10.
+[38] Yiren Song, Shijie Huang, Chen Yao, Xiaojun Ye, Hai Ci, Jiaming Liu, Yuxuan
+Zhang, and Mike Zheng Shou. 2024. Processpainter: Learn painting process from
+sequence data.arXiv preprint arXiv:2406.06062(2024).
+[39] Jian Sun, Lin Liang, Fang Wen, and Heung-Yeung Shum. 2007. Image vectorization
+using optimized gradient meshes.ACM Transactions on Graphics (TOG)26, 3
+(2007), 11–es.
+[40] Jianchao Tan, Jyh-Ming Lien, and Yotam Gingold. 2016. Decomposing images
+into layers via RGB-space geometry.ACM Transactions on Graphics (TOG)36, 1
+(2016), 1–14.
+[41] Gemini Team, Rohan Anil, Sebastian Borgeaud, Jean-Baptiste Alayrac, Jiahui Yu,
+Radu Soricut, Johan Schalkwyk, Andrew M Dai, Anja Hauth, Katie Millican, et al.
+2023. Gemini: a family of highly capable multimodal models.arXiv preprint
+===== PAGE 14 =====
+14•Ying Jiang, et al.
+arXiv:2312.11805(2023).
+[42] Qinghe Tian and Jean-Claude Franchitti. 2022. Text to artistic image generation.
+arXiv preprint arXiv:2205.02439(2022).
+[43] Yael Vinker, Ehsan Pajouheshgar, Jessica Y Bo, Roman Christian Bachmann,
+Amit Haim Bermano, Daniel Cohen-Or, Amir Zamir, and Ariel Shamir. 2022.
+Clipasso: Semantically-aware object sketching.ACM Transactions on Graphics
+(TOG)41, 4 (2022), 1–11.
+[44] Yizhi Wang and Zhouhui Lian. 2021. Deepvecfont: synthesizing high-quality
+vector fonts via dual-modality learning.ACM Transactions on Graphics (TOG)40,
+6 (2021), 1–15.
+[45] Zhou Wang, Alan C Bovik, Hamid R Sheikh, and Eero P Simoncelli. 2004. Image
+quality assessment: from error visibility to structural similarity.IEEE transactions
+on image processing13, 4 (2004), 600–612.
+[46] Zhenyu Wang, Jianxi Huang, Zhida Sun, Yuanhao Gong, Daniel Cohen-Or, and
+Min Lu. 2025. Layered image vectorization via semantic simplification. InPro-
+ceedings of the Computer Vision and Pattern Recognition Conference. 7728–7738.
+[47] Tianyi Xie, Yiwei Zhao, Ying Jiang, and Chenfanfu Jiang. 2025. Physanimator:
+Physics-guided generative cartoon animation. InProceedings of the Computer
+Vision and Pattern Recognition Conference. 10793–10804.
+[48] Ximing Xing, Chuang Wang, Haitao Zhou, Jing Zhang, Qian Yu, and Dong Xu.
+2023. Diffsketcher: Text guided vector sketch synthesis through latent diffusion
+models.Advances in Neural Information Processing Systems36 (2023), 15869–
+15889.
+[49] Ximing Xing, Haitao Zhou, Chuang Wang, Jing Zhang, Dong Xu, and Qian Yu.
+2024. Svgdreamer: Text guided svg generation with diffusion model. InProceedings
+of the IEEE/CVF Conference on Computer Vision and Pattern Recognition. 4546–
+4555.
+[50] Jinrui Yang, Qing Liu, Yijun Li, Soo Ye Kim, Daniil Pakhomov, Mengwei Ren,
+Jianming Zhang, Zhe Lin, Cihang Xie, and Yuyin Zhou. 2025. Generative Image
+Layer Decomposition with Visual Effects. InProceedings of the Computer Vision
+and Pattern Recognition Conference. 7643–7653.
+[51] Lvmin Zhang, Chuan Yan, Yuwei Guo, Jinbo Xing, and Maneesh Agrawala. 2025.
+Generating Past and Future in Digital Painting Processes.ACM Transactions on
+Graphics (TOG)44, 4 (2025), 1–13.
+[52] Richard Zhang, Phillip Isola, Alexei A Efros, Eli Shechtman, and Oliver Wang.
+2018. The unreasonable effectiveness of deep features as a perceptual metric.
+InProceedings of the IEEE conference on computer vision and pattern recognition.
+586–595.
+[53] Zhengxia Zou, Tianyang Shi, Shuang Qiu, Yi Yuan, and Zhenwei Shi. 2021. Stylized
+neural painting. InProceedings of the IEEE/CVF Conference on Computer Vision
+and Pattern Recognition. 15689–15698.
+===== PAGE 15 =====
+Birth of a Painting: Differentiable Brushstroke Reconstruction•15
+A Per-Category Quantitative Results
+We further provide per-category quantitative evaluations in Table 5, covering four representative painting styles: watercolor, oil, ink, and
+digital. Across all metrics (PSNR, SSIM, LPIPS, and FD) and stroke budgets (128, 256, and 512), our method consistently achieves superior
+performance compared to existing approaches, demonstrating both higher reconstruction fidelity and better perceptual quality.
+Table 5. Per-category quantitative results: PSNR, SSIM, LPIPS, and FD for 128, 256, and 512 brush strokes.
+Watercolor
+Method 128 Brushes 256 Brushes 512 Brushes
+PSNR↑SSIM↑LPIPS↓FD↓ PSNR↑SSIM↑LPIPS↓FD↓ PSNR↑SSIM↑LPIPS↓FD↓
+Optimize&Reduce 18.872 0.5327 0.6093 15.30 20.301 0.5526 0.5590 14.51 21.782 0.5759 0.5058 12.16
+PaintTransformer 16.594 0.4915 0.6854 13.33 17.175 0.4956 0.6276 12.28 18.548 0.5093 0.5457 11.79
+LearningToPaint 19.459 0.5183 0.6475 17.04 21.592 0.5534 0.5800 15.48 23.156 0.5884 0.5294 11.86
+Stylized-Neural-Painting 20.269 0.5310 0.5880 17.12 20.994 0.5521 0.5451 16.11 21.374 0.5705 0.5122 14.21
+Ours 21.168 0.5655 0.5188 10.13 22.290 0.5855 0.4905 9.05 23.269 0.6085 0.4499 7.00
+OilPainting
+Method 128 Brushes 256 Brushes 512 Brushes
+PSNR↑SSIM↑LPIPS↓FD↓ PSNR↑SSIM↑LPIPS↓FD↓ PSNR↑SSIM↑LPIPS↓FD↓
+Optimize&Reduce 19.791 0.4875 0.6395 14.26 21.320 0.5103 0.5903 13.96 22.789 0.5342 0.5345 12.98
+PaintTransformer 17.430 0.4471 0.7152 12.54 17.937 0.4513 0.6673 11.88 19.420 0.4712 0.5917 11.46
+LearningToPaint 20.695 0.4796 0.6746 16.63 22.785 0.5178 0.6080 15.62 24.201 0.5537 0.5586 11.93
+Stylized-Neural-Painting 21.226 0.4913 0.6246 16.89 22.062 0.5163 0.5798 16.49 22.228 0.5359 0.5459 14.96
+Ours 22.439 0.5268 0.5508 10.79 23.318 0.5494 0.5154 9.26 24.026 0.5709 0.4743 7.16
+InkPainting
+Method 128 Brushes 256 Brushes 512 Brushes
+PSNR↑SSIM↑LPIPS↓FD↓ PSNR↑SSIM↑LPIPS↓FD↓ PSNR↑SSIM↑LPIPS↓FD↓
+Optimize&Reduce 18.798 0.6833 0.5000 13.57 20.558 0.7009 0.4576 12.52 22.327 0.7179 0.4245 12.02
+PaintTransformer 15.412 0.5978 0.6736 14.17 16.198 0.6036 0.6299 13.29 17.444 0.6130 0.5554 12.41
+LearningToPaint 18.210 0.6239 0.6073 17.18 20.692 0.6493 0.5500 14.91 22.407 0.6738 0.5079 11.67
+Stylized-Neural-Painting 19.287 0.6339 0.5485 17.07 20.167 0.6452 0.5189 16.39 20.490 0.6549 0.4954 14.62
+Ours 20.339 0.6522 0.4962 9.83 21.309 0.6664 0.4555 7.94 22.055 0.6779 0.4236 6.71
+DigitalPainting
+Method 128 Brushes 256 Brushes 512 Brushes
+PSNR↑SSIM↑LPIPS↓FD↓ PSNR↑SSIM↑LPIPS↓FD↓ PSNR↑SSIM↑LPIPS↓FD↓
+Optimize&Reduce 18.972 0.6383 0.5062 12.53 20.430 0.6490 0.4629 11.13 22.816 0.6691 0.4152 8.95
+PaintTransformer 16.587 0.5934 0.6356 14.88 17.536 0.6014 0.5890 13.67 18.925 0.6149 0.5313 11.48
+LearningToPaint 18.359 0.5957 0.5940 16.52 21.017 0.6183 0.5417 13.29 22.857 0.6421 0.4964 9.61
+Stylized-Neural-Painting 20.370 0.6323 0.5004 14.72 21.392 0.6450 0.4652 13.13 21.629 0.6501 0.4491 11.01
+Ours 21.906 0.6527 0.4599 8.25 22.861 0.6660 0.4229 6.48 23.613 0.6765 0.3972 5.68
+===== PAGE 16 =====
+16•Ying Jiang, et al.
+B More Painting Results
+We showcase additional results, including 1024-stroke reconstructions arranged in a5× 5grid and 128–512-stroke reconstructions on a4 × 4
+canvas, using images from the same test set. The test set includes samples from the publicly available WikiArt dataset [26] and recreated
+artworks collected from an online painting website2 , demonstrating the strong generalization ability of our method across diverse subjects
+and painting styles.
+C More Qualitative Results
+We provide additional qualitative comparisons against Learning to Paint [15], PaintTransformer [21], Stylized Neural Painting [53], and
+O&R [13], illustrating reconstructions from 128 to 512 strokes across four representative painting styles: digital (Fig. 24), oil (Fig. 25, Fig. 26),
+watercolor (Fig. 27, Fig. 28), and ink (Fig. 29, Fig. 30). Our method consistently achieves coherent structural alignment, smooth tonal transitions,
+and realistic painterly effects under varying stroke budgets, demonstrating its robustness and adaptability across different artistic styles.
+2https://www.pinterest.com/
+===== PAGE 17 =====
+Birth of a Painting: Differentiable Brushstroke Reconstruction•17
+1024 128256512Input
+Fig. 15. More showcases from 128 to 1024 strokes in digital painting with the proposed method.
+===== PAGE 18 =====
+18•Ying Jiang, et al.
+1024 128256512Input
+Fig. 16. More showcases from 128 to 1024 strokes in digital paintings with the proposed method.
+===== PAGE 19 =====
+Birth of a Painting: Differentiable Brushstroke Reconstruction•19
+1024 128256512Input
+Fig. 17. More showcases from 128 to 1024 strokes in digital paintings with the proposed method.
+===== PAGE 20 =====
+20•Ying Jiang, et al.
+1024 128256512Input
+Fig. 18. More showcases from 128 to 1024 strokes in ink paintings with the proposed method.
+===== PAGE 21 =====
+Birth of a Painting: Differentiable Brushstroke Reconstruction•21
+1024 128256512Input
+Fig. 19. More showcases from 128 to 1024 strokes in ink paintings with the proposed method.
+===== PAGE 22 =====
+22•Ying Jiang, et al.
+1024 128256512Input
+Fig. 20. More showcases from 128 to 1024 strokes in oil paintings with the proposed method.
+===== PAGE 23 =====
+Birth of a Painting: Differentiable Brushstroke Reconstruction•23
+1024 128256512Input
+Fig. 21. More showcases from 128 to 1024 strokes in oil paintings with the proposed method.
+===== PAGE 24 =====
+24•Ying Jiang, et al.
+1024 128256512Input
+Fig. 22. More showcases from 128 to 1024 strokes in watercolor paintings with the proposed method.
+===== PAGE 25 =====
+Birth of a Painting: Differentiable Brushstroke Reconstruction•25
+1024 128256512Input
+Fig. 23. More showcases from 128 to 1024 strokes in watercolor paintings with the proposed method.
+===== PAGE 26 =====
+26•Ying Jiang, et al.
+Ours Stylized Neural PaintingPaint Transformer Learn to Paint
+Input
+128 256 512512256128
+Input
+O&R
+Fig. 24. More qualitative results from 128 to 512 strokes in digital paintings.
+===== PAGE 27 =====
+Birth of a Painting: Differentiable Brushstroke Reconstruction•27
+Ours Stylized Neural PaintingPaint Transformer Learn to Paint
+Input
+Input
+128 256 512512256128128 256 512
+O&R
+Input
+Fig. 25. More qualitative results from 128 to 512 strokes in oil paintings.
+===== PAGE 28 =====
+28•Ying Jiang, et al.
+Ours Stylized Neural PaintingPaint Transformer Learn to Paint
+128 256 512512256128128 256 512
+Input
+Input
+O&R
+Input
+Fig. 26. More qualitative results from 128 to 512 strokes in oil paintings.
+===== PAGE 29 =====
+Birth of a Painting: Differentiable Brushstroke Reconstruction•29
+Our Stylized Neural PaintingPaint Transformer Learn to PaintOurs Stylized Neural PaintingPaint Transformer Learn to Paint
+128 256 128 256 512 512128 256 512
+Input
+Input
+Input
+O&R
+Fig. 27. More qualitative results from 128 to 512 strokes in watercolor paintings.
+===== PAGE 30 =====
+30•Ying Jiang, et al.
+Ours Stylized Neural PaintingPaint Transformer Learn to Paint
+Input
+Input
+128 256 512 512256128
+Input
+512256128
+O&R
+Fig. 28. More qualitative results from 128 to 512 strokes in watercolor paintings.
+===== PAGE 31 =====
+Birth of a Painting: Differentiable Brushstroke Reconstruction•31
+Our Stylized Neural PaintingPaint Transformer Learn to PaintOurs Stylized Neural PaintingPaint Transformer Learn to Paint
+Input
+128256128 512256512
+ 512256
+Input
+O&R
+Input
+128
+Fig. 29. More qualitative results from 128 to 512 strokes in ink paintings.
+===== PAGE 32 =====
+32•Ying Jiang, et al.
+Ours Stylized Neural PaintingPaint Transformer Learn to Paint
+128 256 512
+Input
+O&R
+Fig. 30. More qualitative results from 128 to 512 strokes in ink paintings.

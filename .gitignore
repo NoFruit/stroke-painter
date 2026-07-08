@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# 虚拟环境
+.venv/
+venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# 生成产物
+output/
+
+# WSL 残留
+*:Zone.Identifier
+
+# 大文件
+cuda-repo-*.deb
+
+# 论文 PDF（见 docs/REFERENCES.md 获取链接）
+docs/**/*.pdf
