@@ -67,6 +67,10 @@ class BrushBase(ABC):
         """
         ...
 
+    @abstractmethod
+    def forward_fast(self, *args, **kwargs) -> Tuple[Tensor, Tensor]:
+        ...
+
     def __call__(self, *args, **kwargs) -> Tuple[Tensor, Tensor]:
         """调用即 forward（轻量转发，不引入 nn.Module 开销）。"""
         return self.forward(*args, **kwargs)

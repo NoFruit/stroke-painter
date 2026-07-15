@@ -100,9 +100,9 @@ class Painter:
 
         # ---- 优化配置（硬编码，全项目范式）----
         self.n_strokes = 5              # 每级笔画批数
-        self.epochs_per_stroke = 100    # 每批优化步数
+        self.epochs_per_stroke = 64    # 每批优化步数
         self.opt_lr = 0.003             # RMSprop 学习率（对齐 BofP 4.1 几何重建）
-        self.commit_chunk = 2           # commit 批化 chunk 大小（显存/并行权衡）
+        self.commit_chunk = 8           # commit 批化 chunk 大小（显存/并行权衡）
 
         # ---- init_raw 超参（ErrorMap 矩引导 -> 笔刷参数 init）----
         self.init_seg_div = 3.0         # 主轴三段等分：u∈[-A,A] -> 两端段/中段
@@ -198,7 +198,7 @@ class Painter:
         with torch.no_grad():
             for i in range(0, B, self.commit_chunk):
                 j = min(i + self.commit_chunk, B)
-                color, alpha = self.brush.forward(params_full[i:j], (H, W))
+                color, alpha = self.brush.forward_fast(params_full[i:j], (H, W))
                 for k in range(j - i):
                     c_k = color[k:k + 1]
                     a_k = alpha[k:k + 1]

@@ -16,20 +16,26 @@
 
 渲染流程（可微）：
   1. 控制点 / 半径归一化 → 像素坐标。
-  2. 弧长 L = ∫||B'(t)||dt（数值积分）；间隔 d = r·ρ。
+  2. 弧长 L = ∫||B'(t)||dt（闭式解）；间隔 d = r·ρ。
   3. Sigmoid 软计数：w_k = σ(α_cnt·(L/d − k))，k=1..K。
   4. stamp k 置于弧长 s_k = k·d 处（弧长→t 反演 → B(t_k)）。
   5. soft-disk 并集覆盖 M(x) = 1 − ∏_k(1 − w_k·disk_k)。
   6. 输出 (color, alpha) 双通道：color = c 广播 (B,3,H,W)（非预乘纯色），
      alpha = α·M (B,1,H,W)（覆盖度）。
 """
+
 from typing import Tuple
 
 import torch
 from torch import Tensor
 
 from .brush_base import BrushBase, ParamLayout
-from ..utils.bezier import arc_length_to_t, bezier_eval, bezier_length
+from ..utils.bezier import (
+    arc_length_to_t,
+    bezier_coefficients,
+    bezier_eval,
+    bezier_length,
+)
 from ..utils.stamp import pixel_grid, render_coverage, soft_stamp_count
 
 PARAM_DIM = 11
@@ -60,11 +66,11 @@ class BezierUniformBrush(BrushBase):
 
     def __init__(self):
         # 固定数值超参（design_paradigm：作为 self 变量硬编码，不外置、不进 config）。
-        self.sigmoid_alpha = 100.0       # 软计数 sigmoid 陡度
-        self.max_stamp_K = 100          # 候选 stamp 数上界
-        self.disk_softness = 100.0       # soft-disk 边缘陡度（无量纲，相对半径）
-        self.stamp_spacing_rho = 0.5    # stamp 间隔比例 ρ：d = r·ρ（ρ<1 → 重叠覆盖）
-        self.arc_length_grid = 256      # 弧长数值积分 / 反演的网格分辨率
+        self.sigmoid_alpha = 100.0  # 软计数 sigmoid 陡度
+        self.max_stamp_K = 100  # 候选 stamp 数上界
+        self.disk_softness = 100.0  # soft-disk 边缘陡度（无量纲，相对半径）
+        self.stamp_spacing_rho = 0.5  # stamp 间隔比例 ρ：d = r·ρ（ρ<1 → 重叠覆盖）
+        self.arc_length_grid = 256  # 弧长反演（arc_length_to_t 的 M）网格分辨率
 
     def forward(self, params: Tensor, patch_size) -> Tuple[Tensor, Tensor]:
         """归一化参数 → (color, alpha)。
@@ -90,26 +96,34 @@ class BezierUniformBrush(BrushBase):
         P0p = P0 * scale
         P1p = P1 * scale
         P2p = P2 * scale
-        r_px = r * ref                  # (B, 1)
+        # 控制点 -> 解析式系数 B(t)=a_coef·t²+b_coef·t+c_coef（线性、可微；算一次复用，省去重复展开）。
+        # 系数加 _coef 后缀以区别于颜色变量 c（RGB）：c_coef 即常数项 = P0p。
+        a_coef, b_coef, c_coef = bezier_coefficients(P0p, P1p, P2p)
+        r_px = r * ref  # (B, 1)
         d = r_px * self.stamp_spacing_rho  # (B, 1) stamp 间隔（像素）
 
-        L = bezier_length(P0p, P1p, P2p, self.arc_length_grid)  # (B,)
+        L = bezier_length(a_coef, b_coef, c_coef)  # (B,) 闭式弧长
         weights = soft_stamp_count(L, d, self.max_stamp_K, self.sigmoid_alpha)  # (B, K)
 
         k = torch.arange(1, self.max_stamp_K + 1, device=device, dtype=dtype)
-        s_targets = d * k[None, :]      # (B, K) 每个 stamp 的目标弧长 s_k = k·d
-        t_k = arc_length_to_t(P0p, P1p, P2p, s_targets, self.arc_length_grid)  # (B, K)
-        centers = bezier_eval(P0p, P1p, P2p, t_k)  # (B, K, 2)
+        s_targets = d * k[None, :]  # (B, K) 每个 stamp 的目标弧长 s_k = k·d
+        t_k = arc_length_to_t(
+            a_coef, b_coef, c_coef, s_targets, self.arc_length_grid
+        )  # (B, K)
+        centers = bezier_eval(a_coef, b_coef, c_coef, t_k)  # (B, K, 2)
 
         grid_coords = pixel_grid(H, W, device, dtype)  # (H, W, 2)
         coverage = render_coverage(
             centers, r_px, weights, grid_coords, self.disk_softness
         )  # (B, H, W)
 
-        A = alpha.unsqueeze(-1) * coverage                # (B, H, W) 覆盖度 = α·M
+        A = alpha.unsqueeze(-1) * coverage  # (B, H, W) 覆盖度 = α·M
         color = c[:, :, None, None].expand(-1, -1, H, W)  # (B, 3, H, W) 纯色（非预乘）
-        alpha_out = A[:, None, :, :]                      # (B, 1, H, W) 覆盖度
+        alpha_out = A[:, None, :, :]  # (B, 1, H, W) 覆盖度
         return color, alpha_out
+
+    def forward_fast(self):
+        raise NotImplementedError
 
     @classmethod
     def main(cls):
@@ -117,23 +131,24 @@ class BezierUniformBrush(BrushBase):
         import matplotlib.pyplot as plt
 
         torch.manual_seed(0)
-        dev = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        dev = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         # 随机参数（不做约束，归一化 [0,1]）。
         params = torch.rand(1, PARAM_DIM, device=dev)
         # 让起终点拉开以得到明显曲线。
         params[0, 0:2] = torch.tensor([0.15, 0.20], device=dev)
         params[0, 4:6] = torch.tensor([0.80, 0.75], device=dev)
         params[0, 2:4] = torch.tensor([0.70, 0.15], device=dev)
-        params[0, 9:10] = torch.tensor([0.05], device=dev)   # r
+        params[0, 9:10] = torch.tensor([0.05], device=dev)  # r
         params[0, 6:9] = torch.tensor([0.9, 0.2, 0.2], device=dev)  # 红
-        params[0, 10:11] = torch.tensor([0.9], device=dev)   # α
+        params[0, 10:11] = torch.tensor([0.9], device=dev)  # α
 
         brush = cls()
         color, alpha = brush.forward(params, (256, 256))
         a = alpha[0, 0].detach().cpu().numpy()
         # 非预乘：color 是纯色常数图，笔刷形状看 alpha；blend 到白底目视
-        rgb = color[0].permute(1, 2, 0).detach().cpu().numpy() * a[..., None] \
-            + (1 - a[..., None])
+        rgb = color[0].permute(1, 2, 0).detach().cpu().numpy() * a[..., None] + (
+            1 - a[..., None]
+        )
 
         fig, axes = plt.subplots(1, 2, figsize=(8, 4))
         axes[0].imshow(rgb)

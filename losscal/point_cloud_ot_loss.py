@@ -1,13 +1,17 @@
 """PointCloudOTLoss — 点云版 OT 损失原语（geomloss 点云路径，无状态）。
 
-套壳 ``geomloss.SamplesLoss(loss="sinkhorn", backend="tensorized")``：把图像压成
+套壳 ``geomloss.SamplesLoss(loss="sinkhorn", backend="online")``：把图像压成
 **固定数量 N 的点云**（权重 = 降采样后的像素质量，坐标 = 落在 ``[0,1)^2`` 的粗
 网格点），再做 debiased Sinkhorn 散度。对应 BofP 的 ``L_OT`` 项。
 
 - grid 版吃整图，但 0.3.1 grid 求解器为坏桩（详见
   ``docs/Loss_OT_geomloss_refs/geomloss_ref.md``），不可用。
-- **本版用点云 tensorized 后端，纯 torch、无 keops 依赖即可跑**；pykeops 已装
-  但本原语保持 tensorized 形态（backend 可配 / multiscale 优化等深度改造见下一阶段）。
+- **backend=online（keops Genred 在线 LSE，不实体化 N×N）**。key_averages 实测：
+  ot forward 的 98% CUDA 时间在 ``GenredAutograd``（pykeops 编译 kernel），喂给
+  sinkhorn 多步迭代的 softmin。
+- **backend 选择**：同 N 下 online 比 tensorized 快 ~2.5x
+  （N=576: online 50s vs tensorized 66s）。tensorized 实体化 N×N 代价矩阵 + exp 算术
+  开销大，仅在 N 大到 OOM 时被迫用；同 N 下它就是更慢。
 
 点云化策略（固定 N，且 N 必须是完全平方数 → s×s 网格）
 ------------------------------------------------------
@@ -48,7 +52,7 @@ from .loss_base import LossBase
 
 
 class PointCloudOTLoss(LossBase):
-    """点云版 debiased Sinkhorn OT 损失原语（tensorized 后端，无 keops，无状态）。
+    """点云版 debiased Sinkhorn OT 损失原语（online 后端 / keops Genred，无状态）。
 
         输入约定（按需：OT 从图像派生质量分布，吃 RGB；target 仅 RGB 无 alpha，
         故 pred/target 对称都从 RGB 派生质量）：
@@ -72,16 +76,22 @@ class PointCloudOTLoss(LossBase):
                                     # 不匹配（笔触覆盖不足时更鲁棒）。None = 平衡 OT
         self.debias = True         # 去偏 Sinkhorn 散度 S_ε（正定，a=b⇒loss=0）
         self.scaling = 0.5         # ε-scaling 退火比，[0.5,1)
-        self.n_points = 4096       # 固定点云数量 N；必须为完全平方数 → s×s 粗网格
+        self.n_points = 576       # 固定点云数量 N；必须为完全平方数 -> s×s 粗网格。
+                                   # N 是 OT 的核心杠杆 ：
+                                   # online 下 N 4096->576，loss.ot -77%、wall -39%。
+                                   # online 无 OOM 墙（不实体化 N×N），N 可继续往下探，但带画质成本。
         self.mass_mode = "luminance"  # 图像 → 质量的取法（见 to_points）
         self.mass_eps = 1e-6       # 质量地板，防 log(0)
-        self.backend = "online"   # 纯 torch，无 keops；N≤~5000 安全
+        # keops Genred 在线 LSE（不实体化 N×N）；key_averages 实测占 ot 98%。
+        self.backend = "online"
         # "tensorized" "online" "multiscale"
-        self.chunk_b = 128          # 批 OT 串行分块大小（人手调）。tensorized 后端逐 batch
-                                    # 实例化代价矩阵 (B,N,N)，B·N²·4 字节随 B 爆炸；B 大于
-                                    # 本机显存能装下的量时，按 chunk_b 分块串行喂 SamplesLoss。
-                                    # 各 batch OT 独立，分块求和再除 B == 整批均值（语义不变，
-                                    # 仅时间换显存）。chunk_b ≥ B 或 =0 时不分块（一次并行）。
+        # backend 选择见 docstring 顶部实测结论：同 N 下 online >> tensorized（N=576: 50s vs 66s），
+        # tensorized 实体化 N×N+exp 开销大，仅 OOM 时被迫用。勿切 tensorized。
+        self.chunk_b = 128          # 批 OT 串行分块大小（仅 tensorized 后端用）。tensorized 实体化
+                                    # 代价矩阵 (B,N,N)，B·N²·4 字节随 B 爆炸；B 超显存时按 chunk_b
+                                    # 分块串行喂 SamplesLoss（各 batch 独立，分块求和再除 B == 整批
+                                    # 均值，语义不变，仅时间换显存）。online 不实体化 N×N，无 OOM 墙，
+                                    # chunk_b 无意义（不触发分块）。
 
         # ---- 派生：s = sqrt(N)，校验完全平方 ----
         s = int(round(self.n_points ** 0.5))
